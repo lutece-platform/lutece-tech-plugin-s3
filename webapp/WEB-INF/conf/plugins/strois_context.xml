@@ -3,7 +3,21 @@
 <beans xmlns="http://www.springframework.org/schema/beans"
        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
        xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd" >
+    <!--
+    <bean id="s3-bucket1" class="fr.paris.lutece.plugins.strois.service.stockageService">
+        <constructor-arg name="s3Url" value="" />
+        <constructor-arg name="s3Bucket" value="" />
+        <constructor-arg name="s3Key" value="" />
+        <constructor-arg name="s3Password" value="" />
+        <constructor-arg name="s3BasePath" value="" />
+    </bean>
 
-
-
+    <bean id="s3-bucket2" class="fr.paris.lutece.plugins.strois.service.stockageService">
+        <constructor-arg name="s3Url" value="" />
+        <constructor-arg name="s3Bucket" value="" />
+        <constructor-arg name="s3Key" value="" />
+        <constructor-arg name="s3Password" value="" />
+        <constructor-arg name="s3BasePath" value="" />
+    </bean>
+    -->
 </beans>
