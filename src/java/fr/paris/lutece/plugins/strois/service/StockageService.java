@@ -55,7 +55,7 @@ import java.io.InputStream;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 
-public class stockageService
+public class StockageService
 {
     private static MinioClient _s3Client;
 
@@ -67,7 +67,7 @@ public class stockageService
     private final String _s3BasePath;
 
 
-    public stockageService( String s3Url, String s3Bucket, String s3Key, String s3Password, String s3BasePath )
+    public StockageService( String s3Url, String s3Bucket, String s3Key, String s3Password, String s3BasePath )
     {
         _s3Url = s3Url;
         _s3Bucket = s3Bucket;
