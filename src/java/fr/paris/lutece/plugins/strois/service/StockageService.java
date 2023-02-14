@@ -84,8 +84,8 @@ public class StockageService
     {
         if ( _s3Client == null )
         {
-            _s3Client = MinioClient.builder( ).endpoint( AppPropertiesService.getProperty( _s3Url ) )
-                                .credentials( AppPropertiesService.getProperty( _s3Key ), AppPropertiesService.getProperty( _s3Password ) ).build( );
+            _s3Client = MinioClient.builder( ).endpoint( _s3Url )
+                                .credentials( _s3Key, _s3Password ).build( );
         }
 
         return _s3Client;
