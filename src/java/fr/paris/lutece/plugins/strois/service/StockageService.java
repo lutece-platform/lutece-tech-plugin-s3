@@ -47,11 +47,16 @@ import io.minio.errors.InvalidResponseException;
 import io.minio.errors.MinioException;
 import io.minio.errors.ServerException;
 import io.minio.errors.XmlParserException;
+import okhttp3.OkHttpClient;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.URI;
+import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
 
@@ -80,15 +85,35 @@ public class StockageService
      * Get S3 client to interact with NetApp server.
      * @return _s3Client
      */
-    private MinioClient getS3Client( )
+    private MinioClient getS3Client( ) throws URISyntaxException
     {
         if ( _s3Client == null )
         {
+            OkHttpClient okHttpClient = new OkHttpClient.Builder(  ).proxy( getProxyLutece( _s3Url ) ).build( );
+
             _s3Client = MinioClient.builder( ).endpoint( _s3Url )
-                                .credentials( _s3Key, _s3Password ).build( );
+                                .credentials( _s3Key, _s3Password ).httpClient( okHttpClient ).build( );
         }
 
         return _s3Client;
+    }
+
+    private Proxy getProxyLutece( String s3Url ) throws URISyntaxException
+    {
+        String strProxyHost = AppPropertiesService.getProperty("httpAccess.proxyHost");
+        int proxyPort = AppPropertiesService.getPropertyInt("httpAccess.proxyPort", 8080);
+        String strProxyUserName = AppPropertiesService.getProperty("httpAccess.proxyUserName");
+        String strProxyPassword = AppPropertiesService.getProperty("httpAccess.proxyPassword");
+        String strNoProxyFor = AppPropertiesService.getProperty("httpAccess.noProxyFor");
+
+        boolean bNoProxy = StringUtils.isNotBlank( strNoProxyFor ) && this.matchesList( strNoProxyFor.split( "," ), new URI( s3Url ).getHost( ) );
+
+        if ( !bNoProxy && StringUtils.isNotEmpty( strProxyHost ) )
+        {
+            InetSocketAddress proxyAddr = new InetSocketAddress(strProxyHost, proxyPort);
+            return new Proxy( Proxy.Type.HTTP, proxyAddr );
+        }
+        return Proxy.NO_PROXY;
     }
 
     /**
@@ -107,7 +132,7 @@ public class StockageService
             return is;
         } catch ( InvalidKeyException | ErrorResponseException | InsufficientDataException | InternalException |
                   InvalidResponseException | NoSuchAlgorithmException | ServerException
-                  | XmlParserException | IllegalArgumentException | IOException e )
+                  | XmlParserException | IllegalArgumentException | IOException | URISyntaxException e )
         {
             AppLogService.error( "Erreur chargement du fichier " + pathToFile, e );
             throw new io.minio.errors.MinioException( "Erreur chargement du fichier " + pathToFile );
@@ -143,7 +168,7 @@ public class StockageService
         }
         catch ( ErrorResponseException | InsufficientDataException | InternalException | InvalidKeyException |
                 InvalidResponseException | IOException | NoSuchAlgorithmException | ServerException |
-                XmlParserException e )
+                XmlParserException | URISyntaxException e )
         {
             AppLogService.error( "Erreur de sauvegarde du fichier " + completePathToFile, e );
             throw new MinioException( "Erreur de sauvegarde du fichier " + completePathToFile );
@@ -177,7 +202,7 @@ public class StockageService
             getS3Client( ).removeObject( RemoveObjectArgs.builder( ).bucket( _s3Bucket ).object( completePathToFile ).build( ) );
         }
         catch ( InvalidKeyException | ErrorResponseException | InsufficientDataException | InternalException | InvalidResponseException | NoSuchAlgorithmException | ServerException
-                  | XmlParserException | IllegalArgumentException | IOException e )
+                  | XmlParserException | IllegalArgumentException | IOException | URISyntaxException e )
         {
             result = false;
             AppLogService.error( "Erreur à la supression du fichier " + completePathToFile + " sur NetApp", e );
@@ -185,6 +210,64 @@ public class StockageService
 
         AppLogService.debug( "Deleting file " + completePathToFile + " is " + ( result?"OK":"KO" ) );
         return result;
+    }
+
+    private boolean matchesList(String[] listPatterns, String strText) {
+        if (listPatterns == null) {
+            return false;
+        } else {
+            int var4 = listPatterns.length;
+
+            for ( String pattern : listPatterns )
+            {
+                if ( matches( pattern, strText ) )
+                {
+                    return true;
+                }
+            }
+
+            return false;
+        }
+    }
+    private static boolean matches(String strPattern, String strText) {
+        String strTextTmp = strText + '\u0000';
+        String strPatternTmp = strPattern + '\u0000';
+        int nLength = strPatternTmp.length();
+        boolean[] states = new boolean[nLength + 1];
+        boolean[] old = new boolean[nLength + 1];
+        old[0] = true;
+
+        for(int i = 0; i < strTextTmp.length(); ++i) {
+            char c = strTextTmp.charAt(i);
+            states = new boolean[nLength + 1];
+
+            for(int j = 0; j < nLength; ++j) {
+                char p = strPatternTmp.charAt(j);
+                if (old[j] && p == '*') {
+                    old[j + 1] = true;
+                }
+
+                if (old[j] && p == c) {
+                    states[j + 1] = true;
+                }
+
+                if (old[j] && p == '?') {
+                    states[j + 1] = true;
+                }
+
+                if (old[j] && p == '*') {
+                    states[j] = true;
+                }
+
+                if (old[j] && p == '*') {
+                    states[j + 1] = true;
+                }
+            }
+
+            old = states;
+        }
+
+        return states[nLength];
     }
 
 }
