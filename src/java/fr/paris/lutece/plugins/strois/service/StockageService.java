@@ -34,6 +34,7 @@
 
 package fr.paris.lutece.plugins.strois.service;
 
+import fr.paris.lutece.plugins.strois.util.S3Util;
 import fr.paris.lutece.portal.service.util.AppLogService;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
 import io.minio.GetObjectArgs;
@@ -89,7 +90,7 @@ public class StockageService
     {
         if ( _s3Client == null )
         {
-            OkHttpClient okHttpClient = new OkHttpClient.Builder(  ).proxy( getProxyLutece( _s3Url ) ).build( );
+            OkHttpClient okHttpClient = new OkHttpClient.Builder(  ).proxy( getHttpAccessProxy( _s3Url ) ).build( );
 
             _s3Client = MinioClient.builder( ).endpoint( _s3Url )
                                 .credentials( _s3Key, _s3Password ).httpClient( okHttpClient ).build( );
@@ -98,15 +99,13 @@ public class StockageService
         return _s3Client;
     }
 
-    private Proxy getProxyLutece( String s3Url ) throws URISyntaxException
+    private Proxy getHttpAccessProxy( String s3Url ) throws URISyntaxException
     {
         String strProxyHost = AppPropertiesService.getProperty("httpAccess.proxyHost");
         int proxyPort = AppPropertiesService.getPropertyInt("httpAccess.proxyPort", 8080);
-        String strProxyUserName = AppPropertiesService.getProperty("httpAccess.proxyUserName");
-        String strProxyPassword = AppPropertiesService.getProperty("httpAccess.proxyPassword");
         String strNoProxyFor = AppPropertiesService.getProperty("httpAccess.noProxyFor");
 
-        boolean bNoProxy = StringUtils.isNotBlank( strNoProxyFor ) && this.matchesList( strNoProxyFor.split( "," ), new URI( s3Url ).getHost( ) );
+        boolean bNoProxy = StringUtils.isNotBlank( strNoProxyFor ) && S3Util.matchesList( strNoProxyFor.split( "," ), new URI( s3Url ).getHost( ) );
 
         if ( !bNoProxy && StringUtils.isNotEmpty( strProxyHost ) )
         {
@@ -119,14 +118,12 @@ public class StockageService
     /**
      * Load file from NetApp server
      * @param pathToFile
-     *          path to find file (method appends s3BasePath)
+     *          path to find file
      * @return IS find
      */
     public InputStream loadFileFromNetAppServeur( String pathToFile ) throws MinioException
     {
-
-        String completePathToFile = _s3BasePath + pathToFile;
-        completePathToFile = completePathToFile.replaceAll( "//", "/" );
+        String completePathToFile = pathToFile.replaceAll( "//", "/" );
         try ( InputStream is = getS3Client( ).getObject( GetObjectArgs.builder( ).bucket( _s3Bucket ).object(  completePathToFile ).build( ) ) )
         {
             return is;
@@ -138,24 +135,35 @@ public class StockageService
             throw new io.minio.errors.MinioException( "Erreur chargement du fichier " + pathToFile );
         }
     }
+    /**
+     * Load file from NetApp server
+     * @param pathToFile
+     *          path to find file (method prepends s3BasePath)
+     * @return IS found
+     */
+    public InputStream loadFileFromNetAppServeurPrependBasePath( String pathToFile ) throws MinioException
+    {
+        String completePathToFile = _s3BasePath + pathToFile;
+        return loadFileFromNetAppServeur( completePathToFile );
+    }
 
     /**
      * Proceed save file.
      *
-     * @param fileToSave file name
-     * @param path path to put file (method appends s3BasePath)
+     * @param fileToSave file content
+     * @param pathToFile path + filename to put file content in
      *
      * @return path to the photo on NetApp serveur
      *
      */
-    public  String saveFileToNetAppServer( byte[] fileToSave, String path, String fileName ) throws MinioException
+    public  String saveFileToNetAppServer( byte[] fileToSave, String pathToFile ) throws MinioException
     {
-        if ( fileToSave == null || StringUtils.isEmpty( fileName) )
+        if ( fileToSave == null || StringUtils.isEmpty( pathToFile) )
         {
             return null;
         }
 
-        String completePathToFile = _s3BasePath + path + fileName;
+        String completePathToFile = _s3BasePath + pathToFile;
         completePathToFile = completePathToFile.replaceAll( "//", "/" );
         if(completePathToFile.startsWith( "/" )) {
             //remove first char if is /
@@ -176,11 +184,30 @@ public class StockageService
 
         return completePathToFile;
     }
+    /**
+     * Proceed save file.
+     *
+     * @param fileToSave file content
+     * @param pathToFile path + filename to put file content in (method prepends s3BasePath)
+     *
+     * @return path to the photo on NetApp serveur
+     *
+     */
+    public  String saveFileToNetAppServerPrependBasePath( byte[] fileToSave, String pathToFile ) throws MinioException
+    {
+        if ( fileToSave == null || StringUtils.isEmpty( pathToFile ) )
+        {
+            return null;
+        }
+
+        String completePathToFile = _s3BasePath + pathToFile;
+        return saveFileToNetAppServer( fileToSave, completePathToFile );
+    }
 
     /**
      * Delete file on NetApp server.
      * @param pathToFile
-     *         file to delete, complete with file name (method appends s3BasePath)
+     *         file to delete, complete with file name
      * @return false if error
      */
     public boolean deleteFileOnNetAppServeur( String pathToFile )
@@ -194,8 +221,7 @@ public class StockageService
 
         boolean result = true;
 
-        String completePathToFile = _s3BasePath + pathToFile;
-        completePathToFile = completePathToFile.replaceAll( "//", "/" );
+        String completePathToFile = pathToFile.replaceAll( "//", "/" );
         AppLogService.debug( "File to delete " + completePathToFile );
         try
         {
@@ -211,63 +237,24 @@ public class StockageService
         AppLogService.debug( "Deleting file " + completePathToFile + " is " + ( result?"OK":"KO" ) );
         return result;
     }
+    /**
+     * Delete file on NetApp server.
+     * @param pathToFile
+     *         file to delete, complete with file name (method prepends s3BasePath)
+     * @return false if error
+     */
+    public boolean deleteFileOnNetAppServeurPrependBasePath( String pathToFile )
+    {
 
-    private boolean matchesList(String[] listPatterns, String strText) {
-        if (listPatterns == null) {
-            return false;
-        } else {
-            int var4 = listPatterns.length;
-
-            for ( String pattern : listPatterns )
-            {
-                if ( matches( pattern, strText ) )
-                {
-                    return true;
-                }
-            }
-
+        if ( StringUtils.isEmpty( pathToFile ) )
+        {
+            AppLogService.debug( "Cannot deleting file, pathToFile null or empty" );
             return false;
         }
-    }
-    private static boolean matches(String strPattern, String strText) {
-        String strTextTmp = strText + '\u0000';
-        String strPatternTmp = strPattern + '\u0000';
-        int nLength = strPatternTmp.length();
-        boolean[] states = new boolean[nLength + 1];
-        boolean[] old = new boolean[nLength + 1];
-        old[0] = true;
 
-        for(int i = 0; i < strTextTmp.length(); ++i) {
-            char c = strTextTmp.charAt(i);
-            states = new boolean[nLength + 1];
+        String completePathToFile = _s3BasePath + pathToFile;
 
-            for(int j = 0; j < nLength; ++j) {
-                char p = strPatternTmp.charAt(j);
-                if (old[j] && p == '*') {
-                    old[j + 1] = true;
-                }
-
-                if (old[j] && p == c) {
-                    states[j + 1] = true;
-                }
-
-                if (old[j] && p == '?') {
-                    states[j + 1] = true;
-                }
-
-                if (old[j] && p == '*') {
-                    states[j] = true;
-                }
-
-                if (old[j] && p == '*') {
-                    states[j + 1] = true;
-                }
-            }
-
-            old = states;
-        }
-
-        return states[nLength];
+        return deleteFileOnNetAppServeur( completePathToFile );
     }
 
 }
