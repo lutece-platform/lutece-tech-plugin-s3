@@ -72,7 +72,6 @@ public class StockageService
     private final String _s3Password;
     private final String _s3BasePath;
 
-
     public StockageService( String s3Url, String s3Bucket, String s3Key, String s3Password, String s3BasePath )
     {
         _s3Url = s3Url;
@@ -84,16 +83,16 @@ public class StockageService
 
     /**
      * Get S3 client to interact with NetApp server.
+     * 
      * @return _s3Client
      */
     private MinioClient getS3Client( ) throws URISyntaxException
     {
         if ( _s3Client == null )
         {
-            OkHttpClient okHttpClient = new OkHttpClient.Builder(  ).proxy( getHttpAccessProxy( _s3Url ) ).build( );
+            OkHttpClient okHttpClient = new OkHttpClient.Builder( ).proxy( getHttpAccessProxy( _s3Url ) ).build( );
 
-            _s3Client = MinioClient.builder( ).endpoint( _s3Url )
-                                .credentials( _s3Key, _s3Password ).httpClient( okHttpClient ).build( );
+            _s3Client = MinioClient.builder( ).endpoint( _s3Url ).credentials( _s3Key, _s3Password ).httpClient( okHttpClient ).build( );
         }
 
         return _s3Client;
@@ -101,15 +100,15 @@ public class StockageService
 
     private Proxy getHttpAccessProxy( String s3Url ) throws URISyntaxException
     {
-        String strProxyHost = AppPropertiesService.getProperty("httpAccess.proxyHost");
-        int proxyPort = AppPropertiesService.getPropertyInt("httpAccess.proxyPort", 8080);
-        String strNoProxyFor = AppPropertiesService.getProperty("httpAccess.noProxyFor");
+        String strProxyHost = AppPropertiesService.getProperty( "httpAccess.proxyHost" );
+        int proxyPort = AppPropertiesService.getPropertyInt( "httpAccess.proxyPort", 8080 );
+        String strNoProxyFor = AppPropertiesService.getProperty( "httpAccess.noProxyFor" );
 
         boolean bNoProxy = StringUtils.isNotBlank( strNoProxyFor ) && S3Util.matchesList( strNoProxyFor.split( "," ), new URI( s3Url ).getHost( ) );
 
         if ( !bNoProxy && StringUtils.isNotEmpty( strProxyHost ) )
         {
-            InetSocketAddress proxyAddr = new InetSocketAddress(strProxyHost, proxyPort);
+            InetSocketAddress proxyAddr = new InetSocketAddress( strProxyHost, proxyPort );
             return new Proxy( Proxy.Type.HTTP, proxyAddr );
         }
         return Proxy.NO_PROXY;
@@ -117,28 +116,31 @@ public class StockageService
 
     /**
      * Load file from NetApp server
+     * 
      * @param pathToFile
-     *          path to find file
+     *            path to find file
      * @return IS find
      */
     public InputStream loadFileFromNetAppServeur( String pathToFile ) throws MinioException
     {
         String completePathToFile = pathToFile.replaceAll( "//", "/" );
-        try ( InputStream is = getS3Client( ).getObject( GetObjectArgs.builder( ).bucket( _s3Bucket ).object(  completePathToFile ).build( ) ) )
+        try ( InputStream is = getS3Client( ).getObject( GetObjectArgs.builder( ).bucket( _s3Bucket ).object( completePathToFile ).build( ) ) )
         {
             return is;
-        } catch ( InvalidKeyException | ErrorResponseException | InsufficientDataException | InternalException |
-                  InvalidResponseException | NoSuchAlgorithmException | ServerException
-                  | XmlParserException | IllegalArgumentException | IOException | URISyntaxException e )
+        }
+        catch( InvalidKeyException | ErrorResponseException | InsufficientDataException | InternalException | InvalidResponseException
+                | NoSuchAlgorithmException | ServerException | XmlParserException | IllegalArgumentException | IOException | URISyntaxException e )
         {
             AppLogService.error( "Erreur chargement du fichier " + pathToFile, e );
             throw new io.minio.errors.MinioException( "Erreur chargement du fichier " + pathToFile );
         }
     }
+
     /**
      * Load file from NetApp server
+     * 
      * @param pathToFile
-     *          path to find file (method prepends s3BasePath)
+     *            path to find file (method prepends s3BasePath)
      * @return IS found
      */
     public InputStream loadFileFromNetAppServeurPrependBasePath( String pathToFile ) throws MinioException
@@ -150,33 +152,35 @@ public class StockageService
     /**
      * Proceed save file.
      *
-     * @param fileToSave file content
-     * @param pathToFile path + filename to put file content in
+     * @param fileToSave
+     *            file content
+     * @param pathToFile
+     *            path + filename to put file content in
      *
      * @return path to the photo on NetApp serveur
      *
      */
-    public  String saveFileToNetAppServer( byte[] fileToSave, String pathToFile ) throws MinioException
+    public String saveFileToNetAppServer( byte [ ] fileToSave, String pathToFile ) throws MinioException
     {
-        if ( fileToSave == null || StringUtils.isEmpty( pathToFile) )
+        if ( fileToSave == null || StringUtils.isEmpty( pathToFile ) )
         {
             return null;
         }
 
         String completePathToFile = _s3BasePath + pathToFile;
         completePathToFile = completePathToFile.replaceAll( "//", "/" );
-        if(completePathToFile.startsWith( "/" )) {
-            //remove first char if is /
+        if ( completePathToFile.startsWith( "/" ) )
+        {
+            // remove first char if is /
             completePathToFile = completePathToFile.substring( 1 );
         }
         try
         {
-            getS3Client( ).putObject( PutObjectArgs.builder( ).bucket( _s3Bucket).object( completePathToFile )
-                                              .stream( new ByteArrayInputStream( fileToSave ), fileToSave.length, -1 ).build( ) );
+            getS3Client( ).putObject( PutObjectArgs.builder( ).bucket( _s3Bucket ).object( completePathToFile )
+                    .stream( new ByteArrayInputStream( fileToSave ), fileToSave.length, -1 ).build( ) );
         }
-        catch ( ErrorResponseException | InsufficientDataException | InternalException | InvalidKeyException |
-                InvalidResponseException | IOException | NoSuchAlgorithmException | ServerException |
-                XmlParserException | URISyntaxException e )
+        catch( ErrorResponseException | InsufficientDataException | InternalException | InvalidKeyException | InvalidResponseException | IOException
+                | NoSuchAlgorithmException | ServerException | XmlParserException | URISyntaxException e )
         {
             AppLogService.error( "Erreur de sauvegarde du fichier " + completePathToFile, e );
             throw new MinioException( "Erreur de sauvegarde du fichier " + completePathToFile );
@@ -184,16 +188,19 @@ public class StockageService
 
         return completePathToFile;
     }
+
     /**
      * Proceed save file.
      *
-     * @param fileToSave file content
-     * @param pathToFile path + filename to put file content in (method prepends s3BasePath)
+     * @param fileToSave
+     *            file content
+     * @param pathToFile
+     *            path + filename to put file content in (method prepends s3BasePath)
      *
      * @return path to the photo on NetApp serveur
      *
      */
-    public  String saveFileToNetAppServerPrependBasePath( byte[] fileToSave, String pathToFile ) throws MinioException
+    public String saveFileToNetAppServerPrependBasePath( byte [ ] fileToSave, String pathToFile ) throws MinioException
     {
         if ( fileToSave == null || StringUtils.isEmpty( pathToFile ) )
         {
@@ -206,8 +213,9 @@ public class StockageService
 
     /**
      * Delete file on NetApp server.
+     * 
      * @param pathToFile
-     *         file to delete, complete with file name
+     *            file to delete, complete with file name
      * @return false if error
      */
     public boolean deleteFileOnNetAppServeur( String pathToFile )
@@ -227,20 +235,22 @@ public class StockageService
         {
             getS3Client( ).removeObject( RemoveObjectArgs.builder( ).bucket( _s3Bucket ).object( completePathToFile ).build( ) );
         }
-        catch ( InvalidKeyException | ErrorResponseException | InsufficientDataException | InternalException | InvalidResponseException | NoSuchAlgorithmException | ServerException
-                  | XmlParserException | IllegalArgumentException | IOException | URISyntaxException e )
+        catch( InvalidKeyException | ErrorResponseException | InsufficientDataException | InternalException | InvalidResponseException
+                | NoSuchAlgorithmException | ServerException | XmlParserException | IllegalArgumentException | IOException | URISyntaxException e )
         {
             result = false;
             AppLogService.error( "Erreur à la supression du fichier " + completePathToFile + " sur NetApp", e );
         }
 
-        AppLogService.debug( "Deleting file " + completePathToFile + " is " + ( result?"OK":"KO" ) );
+        AppLogService.debug( "Deleting file " + completePathToFile + " is " + ( result ? "OK" : "KO" ) );
         return result;
     }
+
     /**
      * Delete file on NetApp server.
+     * 
      * @param pathToFile
-     *         file to delete, complete with file name (method prepends s3BasePath)
+     *            file to delete, complete with file name (method prepends s3BasePath)
      * @return false if error
      */
     public boolean deleteFileOnNetAppServeurPrependBasePath( String pathToFile )

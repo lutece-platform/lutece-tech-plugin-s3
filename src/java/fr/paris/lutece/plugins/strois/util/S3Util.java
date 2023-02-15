@@ -41,7 +41,8 @@ public class S3Util
 
     }
 
-    public static boolean matchesList(String[] listPatterns, String strText) {
+    public static boolean matchesList( String [ ] listPatterns, String strText )
+    {
         if ( listPatterns != null )
         {
             for ( String pattern : listPatterns )
@@ -54,44 +55,53 @@ public class S3Util
         }
         return false;
     }
-    public static boolean matches(String strPattern, String strText) {
+
+    public static boolean matches( String strPattern, String strText )
+    {
         String strTextTmp = strText + '\u0000';
         String strPatternTmp = strPattern + '\u0000';
-        int nLength = strPatternTmp.length();
-        boolean[] states = new boolean[nLength + 1];
-        boolean[] old = new boolean[nLength + 1];
-        old[0] = true;
+        int nLength = strPatternTmp.length( );
+        boolean [ ] states = new boolean [ nLength + 1];
+        boolean [ ] old = new boolean [ nLength + 1];
+        old [0] = true;
 
-        for(int i = 0; i < strTextTmp.length(); ++i) {
-            char c = strTextTmp.charAt(i);
-            states = new boolean[nLength + 1];
+        for ( int i = 0; i < strTextTmp.length( ); ++i )
+        {
+            char c = strTextTmp.charAt( i );
+            states = new boolean [ nLength + 1];
 
-            for(int j = 0; j < nLength; ++j) {
-                char p = strPatternTmp.charAt(j);
-                if (old[j] && p == '*') {
-                    old[j + 1] = true;
+            for ( int j = 0; j < nLength; ++j )
+            {
+                char p = strPatternTmp.charAt( j );
+                if ( old [j] && p == '*' )
+                {
+                    old [j + 1] = true;
                 }
 
-                if (old[j] && p == c) {
-                    states[j + 1] = true;
+                if ( old [j] && p == c )
+                {
+                    states [j + 1] = true;
                 }
 
-                if (old[j] && p == '?') {
-                    states[j + 1] = true;
+                if ( old [j] && p == '?' )
+                {
+                    states [j + 1] = true;
                 }
 
-                if (old[j] && p == '*') {
-                    states[j] = true;
+                if ( old [j] && p == '*' )
+                {
+                    states [j] = true;
                 }
 
-                if (old[j] && p == '*') {
-                    states[j + 1] = true;
+                if ( old [j] && p == '*' )
+                {
+                    states [j + 1] = true;
                 }
             }
 
             old = states;
         }
 
-        return states[nLength];
+        return states [nLength];
     }
 }
