@@ -44,6 +44,7 @@ import io.minio.RemoveObjectArgs;
 import io.minio.errors.ErrorResponseException;
 import io.minio.errors.MinioException;
 import okhttp3.OkHttpClient;
+import org.apache.commons.lang3.RegExUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.ByteArrayInputStream;
@@ -332,13 +333,8 @@ public class StockageService
      */
     private String normalizeS3Path( String path )
     {
-        path = path.replaceAll( DOUBLE_SLASH, SLASH );
-        if ( path.startsWith( SLASH ) )
-        {
-            // remove first char if is /
-            path = path.substring( 1 );
-        }
+        path = RegExUtils.replaceAll( path, DOUBLE_SLASH, SLASH );
+        path = StringUtils.removeStart( path, SLASH );
         return path;
     }
-
 }
