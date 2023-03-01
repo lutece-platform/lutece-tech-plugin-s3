@@ -67,6 +67,9 @@ public class StockageService
     private final String _s3Password;
     private final String _s3BasePath;
 
+    private static final String SLASH = "/";
+    private static final String DOUBLE_SLASH = "//";
+
     public StockageService( String s3Url, String s3Bucket, String s3Key, String s3Password, String s3BasePath )
     {
         _s3Url = s3Url;
@@ -93,6 +96,12 @@ public class StockageService
         return _s3Client;
     }
 
+    /**
+     * Get proxy from httpaccess conf
+     * @param s3Url url to match to "noProxyFor"
+     * @return Proxy or Proxy.NO_PROXY
+     * @throws URISyntaxException
+     */
     private Proxy getHttpAccessProxy( String s3Url ) throws URISyntaxException
     {
         String strProxyHost = AppPropertiesService.getProperty( "httpAccess.proxyHost" );
@@ -118,7 +127,7 @@ public class StockageService
      */
     public InputStream loadFileFromNetAppServeur( String pathToFile ) throws MinioException
     {
-        String completePathToFile = pathToFile.replaceAll( "//", "/" );
+        String completePathToFile = normalizeS3Path( pathToFile );
         try ( InputStream is = getS3Client( ).getObject( GetObjectArgs.builder( ).bucket( _s3Bucket ).object( completePathToFile ).build( ) ) )
         {
             return is;
@@ -173,13 +182,7 @@ public class StockageService
             return null;
         }
 
-        String completePathToFile = _s3BasePath + pathToFile;
-        completePathToFile = completePathToFile.replaceAll( "//", "/" );
-        if ( completePathToFile.startsWith( "/" ) )
-        {
-            // remove first char if is /
-            completePathToFile = completePathToFile.substring( 1 );
-        }
+        String completePathToFile = normalizeS3Path( pathToFile );
         try
         {
             getS3Client( ).putObject( PutObjectArgs.builder( ).bucket( _s3Bucket ).object( completePathToFile )
@@ -240,13 +243,13 @@ public class StockageService
 
         if ( StringUtils.isEmpty( pathToFile ) )
         {
-            AppLogService.debug( "Cannot deleting file, pathToFile null or empty" );
+            AppLogService.debug( "Cannot delete file, pathToFile null or empty" );
             return false;
         }
 
         boolean result = true;
 
-        String completePathToFile = pathToFile.replaceAll( "//", "/" );
+        String completePathToFile = normalizeS3Path( pathToFile );
         AppLogService.debug( "File to delete " + completePathToFile );
         try
         {
@@ -320,6 +323,22 @@ public class StockageService
         {
             AppLogService.debug( "Cause \n" + e.getCause( ) );
         }
+    }
+
+    /**
+     * Remplace "//" par "/" et supprime "/" si en début de chaine
+     * @param path
+     * @return
+     */
+    private String normalizeS3Path( String path )
+    {
+        path = path.replaceAll( DOUBLE_SLASH, SLASH );
+        if ( path.startsWith( SLASH ) )
+        {
+            // remove first char if is /
+            path = path.substring( 1 );
+        }
+        return path;
     }
 
 }
