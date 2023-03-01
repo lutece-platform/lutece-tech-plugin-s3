@@ -42,12 +42,7 @@ import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
 import io.minio.errors.ErrorResponseException;
-import io.minio.errors.InsufficientDataException;
-import io.minio.errors.InternalException;
-import io.minio.errors.InvalidResponseException;
 import io.minio.errors.MinioException;
-import io.minio.errors.ServerException;
-import io.minio.errors.XmlParserException;
 import okhttp3.OkHttpClient;
 import org.apache.commons.lang3.StringUtils;
 
@@ -128,11 +123,22 @@ public class StockageService
         {
             return is;
         }
-        catch( InvalidKeyException | ErrorResponseException | InsufficientDataException | InternalException | InvalidResponseException
-                | NoSuchAlgorithmException | ServerException | XmlParserException | IllegalArgumentException | IOException | URISyntaxException e )
+        catch( InvalidKeyException | IOException | NoSuchAlgorithmException | URISyntaxException e )
         {
             AppLogService.error( "Erreur chargement du fichier " + pathToFile, e );
             throw new io.minio.errors.MinioException( "Erreur chargement du fichier " + pathToFile );
+        }
+        catch ( ErrorResponseException e )
+        {
+            AppLogService.error( "Erreur chargement du fichier " + pathToFile, e );
+            logErrorResponse( e );
+            throw new MinioException( "Erreur chargement du fichier " + pathToFile );
+        }
+        catch ( MinioException e )
+        {
+            AppLogService.error( "Erreur chargement du fichier " + pathToFile, e );
+            logMinioException( e );
+            throw new MinioException( "Erreur chargement du fichier " + pathToFile );
         }
     }
 
@@ -179,10 +185,21 @@ public class StockageService
             getS3Client( ).putObject( PutObjectArgs.builder( ).bucket( _s3Bucket ).object( completePathToFile )
                     .stream( new ByteArrayInputStream( fileToSave ), fileToSave.length, -1 ).build( ) );
         }
-        catch( ErrorResponseException | InsufficientDataException | InternalException | InvalidKeyException | InvalidResponseException | IOException
-                | NoSuchAlgorithmException | ServerException | XmlParserException | URISyntaxException e )
+        catch( InvalidKeyException | IOException | NoSuchAlgorithmException | URISyntaxException e )
         {
             AppLogService.error( "Erreur de sauvegarde du fichier " + completePathToFile, e );
+            throw new MinioException( "Erreur de sauvegarde du fichier " + completePathToFile );
+        }
+        catch ( ErrorResponseException e )
+        {
+            AppLogService.error( "Erreur de sauvegarde du fichier " + completePathToFile, e );
+            logErrorResponse( e );
+            throw new MinioException( "Erreur de sauvegarde du fichier " + completePathToFile );
+        }
+        catch ( MinioException e )
+        {
+            AppLogService.error( "Erreur de sauvegarde du fichier " + completePathToFile, e );
+            logMinioException( e );
             throw new MinioException( "Erreur de sauvegarde du fichier " + completePathToFile );
         }
 
@@ -235,9 +252,20 @@ public class StockageService
         {
             getS3Client( ).removeObject( RemoveObjectArgs.builder( ).bucket( _s3Bucket ).object( completePathToFile ).build( ) );
         }
-        catch( InvalidKeyException | ErrorResponseException | InsufficientDataException | InternalException | InvalidResponseException
-                | NoSuchAlgorithmException | ServerException | XmlParserException | IllegalArgumentException | IOException | URISyntaxException e )
+        catch( InvalidKeyException | IOException | NoSuchAlgorithmException | URISyntaxException e )
         {
+            result = false;
+            AppLogService.error( "Erreur à la supression du fichier " + completePathToFile + " sur NetApp", e );
+        }
+        catch ( ErrorResponseException e )
+        {
+            logErrorResponse( e );
+            result = false;
+            AppLogService.error( "Erreur à la supression du fichier " + completePathToFile + " sur NetApp", e );
+        }
+        catch ( MinioException e )
+        {
+            logMinioException( e );
             result = false;
             AppLogService.error( "Erreur à la supression du fichier " + completePathToFile + " sur NetApp", e );
         }
@@ -265,6 +293,33 @@ public class StockageService
         String completePathToFile = _s3BasePath + pathToFile;
 
         return deleteFileOnNetAppServeur( completePathToFile );
+    }
+
+    private void logErrorResponse( ErrorResponseException e )
+    {
+        if ( e.errorResponse( ) != null )
+        {
+            AppLogService.debug( "errorResponse \n" + e.errorResponse( ) );
+        }
+        if ( e.httpTrace( ) != null )
+        {
+            AppLogService.debug( "httpTrace \n" + e.httpTrace( ) );
+        }
+        if ( e.getCause( ) != null )
+        {
+            AppLogService.debug( "Cause \n" + e.getCause( ) );
+        }
+    }
+    private void logMinioException( MinioException e )
+    {
+        if ( e.httpTrace( ) != null )
+        {
+            AppLogService.debug( "httpTrace \n" + e.httpTrace( ) );
+        }
+        if ( e.getCause( ) != null )
+        {
+            AppLogService.debug( "Cause \n" + e.getCause( ) );
+        }
     }
 
 }
