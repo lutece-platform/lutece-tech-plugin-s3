@@ -337,4 +337,14 @@ public class StockageService
         path = StringUtils.removeStart( path, SLASH );
         return path;
     }
+
+    @Override
+    public String toString( )
+    {
+        return "StockageService{" +
+                       "s3Url='" + _s3Url + '\'' +
+                       ", s3Bucket='" + _s3Bucket + '\'' +
+                       ", s3Key='" + StringUtils.abbreviate( _s3Key, 7 ) + '\'' +
+                       '}';
+    }
 }
