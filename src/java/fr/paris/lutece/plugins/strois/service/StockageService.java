@@ -326,7 +326,7 @@ public class StockageService
     }
 
     /**
-     * Remplace "//" par "/" et supprime "/" si en début de chaine
+     * Replace "//" with "/" and delete leading "/" if exists
      * @param path
      * @return
      */
