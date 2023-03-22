@@ -66,18 +66,16 @@ public class StockageService
     private final String _s3Bucket;
     private final String _s3Key;
     private final String _s3Password;
-    private final String _s3BasePath;
 
     private static final String SLASH = "/";
     private static final String DOUBLE_SLASH = "//";
 
-    public StockageService( String s3Url, String s3Bucket, String s3Key, String s3Password, String s3BasePath )
+    public StockageService( String s3Url, String s3Bucket, String s3Key, String s3Password )
     {
         _s3Url = s3Url;
         _s3Bucket = s3Bucket;
         _s3Key = s3Key;
         _s3Password = s3Password;
-        _s3BasePath = s3BasePath;
     }
 
     /**
@@ -153,19 +151,6 @@ public class StockageService
     }
 
     /**
-     * Load file from NetApp server
-     * 
-     * @param pathToFile
-     *            path to find file (method prepends s3BasePath)
-     * @return IS found
-     */
-    public InputStream loadFileFromNetAppServeurPrependBasePath( String pathToFile ) throws MinioException
-    {
-        String completePathToFile = _s3BasePath + pathToFile;
-        return loadFileFromNetAppServeur( completePathToFile );
-    }
-
-    /**
      * Proceed save file.
      *
      * @param fileToSave
@@ -208,28 +193,6 @@ public class StockageService
         }
 
         return completePathToFile;
-    }
-
-    /**
-     * Proceed save file.
-     *
-     * @param fileToSave
-     *            file content
-     * @param pathToFile
-     *            path + filename to put file content in (method prepends s3BasePath)
-     *
-     * @return path to the photo on NetApp serveur
-     *
-     */
-    public String saveFileToNetAppServerPrependBasePath( byte [ ] fileToSave, String pathToFile ) throws MinioException
-    {
-        if ( fileToSave == null || StringUtils.isEmpty( pathToFile ) )
-        {
-            return null;
-        }
-
-        String completePathToFile = _s3BasePath + pathToFile;
-        return saveFileToNetAppServer( fileToSave, completePathToFile );
     }
 
     /**
@@ -278,26 +241,6 @@ public class StockageService
         return result;
     }
 
-    /**
-     * Delete file on NetApp server.
-     * 
-     * @param pathToFile
-     *            file to delete, complete with file name (method prepends s3BasePath)
-     * @return false if error
-     */
-    public boolean deleteFileOnNetAppServeurPrependBasePath( String pathToFile )
-    {
-
-        if ( StringUtils.isEmpty( pathToFile ) )
-        {
-            AppLogService.debug( "Cannot deleting file, pathToFile null or empty" );
-            return false;
-        }
-
-        String completePathToFile = _s3BasePath + pathToFile;
-
-        return deleteFileOnNetAppServeur( completePathToFile );
-    }
 
     private void logErrorResponse( ErrorResponseException e )
     {

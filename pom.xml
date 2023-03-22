@@ -13,8 +13,10 @@
     <artifactId>plugin-pf-s3</artifactId>
     <packaging>lutece-plugin</packaging>
     
+
     <version>1.0.0-SNAPSHOT</version>
     <name>Lutece PF S3 plugin</name>
+    <description>Library to access S3 like datastore</description>
 
     <repositories>
         <repository>
@@ -55,4 +57,11 @@
         <jiraProjectName>STROIS</jiraProjectName>
         <jiraComponentId></jiraComponentId>
     </properties>
+
+    <scm>
+        <connection>scm:git:https://dev.lutece.paris.fr/gitlab/projets/parisfamilles/h22/plugin-pf-strois.git</connection>
+        <developerConnection>scm:git:https://dev.lutece.paris.fr/gitlab/projets/parisfamilles/h22/plugin-pf-strois.git</developerConnection>
+        <tag>HEAD</tag>
+        <url>https://dev.lutece.paris.fr/gitlab/projets/parisfamilles/h22/plugin-pf-strois</url>
+    </scm>
 </project>
