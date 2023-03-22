@@ -109,12 +109,12 @@ public class StockageService
         int proxyPort = AppPropertiesService.getPropertyInt( "httpAccess.proxyPort", 8080 );
         String strNoProxyFor = AppPropertiesService.getProperty( "httpAccess.noProxyFor" );
 
-        if ( StringUtils.isEmpty( strProxyHost ) || StringUtils.isEmpty( strNoProxyFor ) )
+        if ( StringUtils.isEmpty( strProxyHost ) )
         {
             return Proxy.NO_PROXY;
         }
 
-        boolean bNoProxy = S3Util.matchesList( strNoProxyFor.split( "," ), new URI( s3Url ).getHost( ) );
+        boolean bNoProxy = StringUtils.isNotBlank( strNoProxyFor ) && S3Util.matchesList( strNoProxyFor.split( "," ), new URI( s3Url ).getHost( ) );
 
         if ( !bNoProxy )
         {
