@@ -34,6 +34,21 @@
 
 package fr.paris.lutece.plugins.strois.service;
 
+import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
+import java.io.IOException;
+import java.io.InputStream;
+import java.net.InetSocketAddress;
+import java.net.Proxy;
+import java.net.URI;
+import java.net.URISyntaxException;
+import java.security.InvalidKeyException;
+import java.security.NoSuchAlgorithmException;
+
+import org.apache.commons.lang3.RegExUtils;
+import org.apache.commons.lang3.StringUtils;
+import org.apache.tika.io.IOUtils;
+
 import fr.paris.lutece.plugins.strois.util.S3Util;
 import fr.paris.lutece.portal.service.util.AppLogService;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
@@ -44,18 +59,6 @@ import io.minio.RemoveObjectArgs;
 import io.minio.errors.ErrorResponseException;
 import io.minio.errors.MinioException;
 import okhttp3.OkHttpClient;
-import org.apache.commons.lang3.RegExUtils;
-import org.apache.commons.lang3.StringUtils;
-
-import java.io.ByteArrayInputStream;
-import java.io.IOException;
-import java.io.InputStream;
-import java.net.InetSocketAddress;
-import java.net.Proxy;
-import java.net.URI;
-import java.net.URISyntaxException;
-import java.security.InvalidKeyException;
-import java.security.NoSuchAlgorithmException;
 
 public class StockageService
 {
@@ -124,12 +127,14 @@ public class StockageService
      *            path to find file
      * @return IS find
      */
-    public InputStream loadFileFromNetAppServeur( String pathToFile ) throws MinioException
+    public byte[] loadFileFromNetAppServeur( String pathToFile ) throws MinioException
     {
         String completePathToFile = normalizeS3Path( pathToFile );
         try ( InputStream is = getS3Client( ).getObject( GetObjectArgs.builder( ).bucket( _s3Bucket ).object( completePathToFile ).build( ) ) )
         {
-            return is;
+        	ByteArrayOutputStream output = new ByteArrayOutputStream( );
+            IOUtils.copy( is, output );
+            return output.toByteArray();
         }
         catch( InvalidKeyException | IOException | NoSuchAlgorithmException | URISyntaxException e )
         {
