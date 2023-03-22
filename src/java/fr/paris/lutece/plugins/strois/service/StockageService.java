@@ -44,10 +44,12 @@ import io.minio.RemoveObjectArgs;
 import io.minio.errors.ErrorResponseException;
 import io.minio.errors.MinioException;
 import okhttp3.OkHttpClient;
+import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.RegExUtils;
 import org.apache.commons.lang3.StringUtils;
 
 import java.io.ByteArrayInputStream;
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.net.InetSocketAddress;
@@ -107,9 +109,14 @@ public class StockageService
         int proxyPort = AppPropertiesService.getPropertyInt( "httpAccess.proxyPort", 8080 );
         String strNoProxyFor = AppPropertiesService.getProperty( "httpAccess.noProxyFor" );
 
-        boolean bNoProxy = StringUtils.isNotBlank( strNoProxyFor ) && S3Util.matchesList( strNoProxyFor.split( "," ), new URI( s3Url ).getHost( ) );
+        if ( StringUtils.isEmpty( strProxyHost ) || StringUtils.isEmpty( strNoProxyFor ) )
+        {
+            return Proxy.NO_PROXY;
+        }
 
-        if ( !bNoProxy && StringUtils.isNotEmpty( strProxyHost ) )
+        boolean bNoProxy = S3Util.matchesList( strNoProxyFor.split( "," ), new URI( s3Url ).getHost( ) );
+
+        if ( !bNoProxy )
         {
             InetSocketAddress proxyAddr = new InetSocketAddress( strProxyHost, proxyPort );
             return new Proxy( Proxy.Type.HTTP, proxyAddr );
@@ -119,17 +126,18 @@ public class StockageService
 
     /**
      * Load file from NetApp server
-     * 
-     * @param pathToFile
-     *            path to find file
-     * @return IS find
+     *
+     * @param pathToFile path to find file
+     * @return byte[] found
      */
-    public InputStream loadFileFromNetAppServeur( String pathToFile ) throws MinioException
+    public byte[] loadFileFromNetAppServeur( String pathToFile ) throws MinioException
     {
         String completePathToFile = normalizeS3Path( pathToFile );
         try ( InputStream is = getS3Client( ).getObject( GetObjectArgs.builder( ).bucket( _s3Bucket ).object( completePathToFile ).build( ) ) )
         {
-            return is;
+            ByteArrayOutputStream output = new ByteArrayOutputStream( );
+            IOUtils.copy( is, output );
+            return output.toByteArray( );
         }
         catch( InvalidKeyException | IOException | NoSuchAlgorithmException | URISyntaxException e )
         {
@@ -154,7 +162,7 @@ public class StockageService
      * Proceed save file.
      *
      * @param fileToSave
-     *            file content
+     *            file content as byte[]
      * @param pathToFile
      *            path + filename to put file content in
      *
