@@ -14,7 +14,7 @@
     <packaging>lutece-plugin</packaging>
     
 
-    <version>1.0.0</version>
+    <version>1.0.1-SNAPSHOT</version>
     <name>Lutece PF S3 plugin</name>
     <description>Library to access S3 like datastore</description>
 
@@ -61,7 +61,7 @@
     <scm>
         <connection>scm:git:https://dev.lutece.paris.fr/gitlab/projets/parisfamilles/h22/plugin-pf-strois.git</connection>
         <developerConnection>scm:git:https://dev.lutece.paris.fr/gitlab/projets/parisfamilles/h22/plugin-pf-strois.git</developerConnection>
-        <tag>plugin-pf-s3-1.0.0</tag>
+        <tag>HEAD</tag>
         <url>https://dev.lutece.paris.fr/gitlab/projets/parisfamilles/h22/plugin-pf-strois</url>
     </scm>
 </project>
