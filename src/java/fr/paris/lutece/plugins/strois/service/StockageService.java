@@ -1,5 +1,5 @@
 /*
- * Copyright (c) 2002-2023, City of Paris
+ * Copyright (c) 2002-2024, City of Paris
  * All rights reserved.
  *
  * Redistribution and use in source and binary forms, with or without
@@ -52,6 +52,7 @@ import java.io.ByteArrayInputStream;
 import java.io.ByteArrayOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.InetSocketAddress;
 import java.net.Proxy;
 import java.net.URI;
@@ -249,6 +250,45 @@ public class StockageService
         return result;
     }
 
+    /**
+     * Enables HTTP call tracing and written to traceStream.
+     *
+     * @param traceStream {@link OutputStream} for writing HTTP call tracing.
+     * @see #traceOff
+     */
+    public void traceOn( OutputStream traceStream ) throws URISyntaxException
+    {
+        getS3Client( ).traceOn( traceStream );
+    }
+
+    /**
+     * Disables HTTP call tracing previously enabled.
+     *
+     * @see #traceOn
+     * @throws IOException upon connection error
+     */
+    public void traceOff( ) throws IOException, URISyntaxException
+    {
+        getS3Client( ).traceOff( );
+    }
+
+    /**
+     * Sets HTTP connect, write and read timeouts. A value of 0 means no timeout, otherwise values
+     * must be between 1 and Integer.MAX_VALUE when converted to milliseconds.
+     *
+     * <pre>Example:{@code
+     * setTimeout(TimeUnit.SECONDS.toMillis(10), TimeUnit.SECONDS.toMillis(10),
+     *     TimeUnit.SECONDS.toMillis(30));
+     * }</pre>
+     *
+     * @param connectTimeout HTTP connect timeout in milliseconds.
+     * @param writeTimeout HTTP write timeout in milliseconds.
+     * @param readTimeout HTTP read timeout in milliseconds.
+     */
+    public void setTimeout(long connectTimeout, long writeTimeout, long readTimeout) throws URISyntaxException
+    {
+        getS3Client( ).setTimeout( connectTimeout, writeTimeout, readTimeout );
+    }
 
     private void logErrorResponse( ErrorResponseException e )
     {
