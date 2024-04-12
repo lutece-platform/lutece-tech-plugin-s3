@@ -61,7 +61,7 @@ import java.security.NoSuchAlgorithmException;
 
 public class StockageService
 {
-    private static MinioClient _s3Client;
+    private MinioClient _s3Client;
 
     // Properties
     private final String _s3Url;
