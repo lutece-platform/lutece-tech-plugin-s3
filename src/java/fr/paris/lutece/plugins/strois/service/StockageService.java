@@ -73,6 +73,8 @@ public class StockageService
     private static final String SLASH = "/";
     private static final String DOUBLE_SLASH = "//";
 
+    private static final long DEFAULT_PART_SIZE = AppPropertiesService.getPropertyLong( "strois.default.partSize", 10485760L );
+
     public StockageService( String s3Url, String s3Bucket, String s3Key, String s3Password )
     {
         _s3Url = s3Url;
@@ -143,7 +145,7 @@ public class StockageService
         catch( InvalidKeyException | IOException | NoSuchAlgorithmException | URISyntaxException e )
         {
             AppLogService.error( "Erreur chargement du fichier " + pathToFile, e );
-            throw new io.minio.errors.MinioException( "Erreur chargement du fichier " + pathToFile );
+            throw new MinioException( "Erreur chargement du fichier " + pathToFile );
         }
         catch ( ErrorResponseException e )
         {
@@ -168,9 +170,29 @@ public class StockageService
      *            path + filename to put file content in
      *
      * @return path to the photo on NetApp serveur
+     * @throws MinioException error uploading the file
      *
      */
     public String saveFileToNetAppServer( byte [ ] fileToSave, String pathToFile ) throws MinioException
+    {
+        return saveFileToNetAppServer( new ByteArrayInputStream( fileToSave ), fileToSave.length, pathToFile );
+    }
+
+    /**
+     * Proceed save file.
+     *
+     * @param fileToSave
+     *            file content InputStream
+     * @param fileLength
+     *            file length (-1 if unknown, uses default part size then)
+     * @param pathToFile
+     *            path + filename to put file content in
+     *
+     * @return path to the photo on NetApp serveur
+     * @throws MinioException error uploading the file
+     *
+     */
+    public String saveFileToNetAppServer( InputStream fileToSave, long fileLength, String pathToFile ) throws MinioException
     {
         if ( fileToSave == null || StringUtils.isEmpty( pathToFile ) )
         {
@@ -180,8 +202,18 @@ public class StockageService
         String completePathToFile = normalizeS3Path( pathToFile );
         try
         {
-            getS3Client( ).putObject( PutObjectArgs.builder( ).bucket( _s3Bucket ).object( completePathToFile )
-                    .stream( new ByteArrayInputStream( fileToSave ), fileToSave.length, -1 ).build( ) );
+            long partSize = -1;
+            if ( fileLength == -1 )
+            {
+                partSize = DEFAULT_PART_SIZE;
+            }
+
+            getS3Client( )
+                    .putObject( PutObjectArgs.builder( )
+                                        .bucket( _s3Bucket )
+                                        .object( completePathToFile )
+                                        .stream( fileToSave , fileLength, partSize )
+                                        .build( ) );
         }
         catch( InvalidKeyException | IOException | NoSuchAlgorithmException | URISyntaxException e )
         {
