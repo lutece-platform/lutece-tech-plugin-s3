@@ -41,8 +41,11 @@ import fr.paris.lutece.portal.service.util.AppPropertiesService;
 import io.minio.GetObjectArgs;
 import io.minio.GetObjectTagsArgs;
 import io.minio.MinioClient;
+import io.minio.ObjectWriteResponse;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
+import io.minio.SnowballObject;
+import io.minio.UploadSnowballObjectsArgs;
 import io.minio.errors.ErrorResponseException;
 import io.minio.errors.InsufficientDataException;
 import io.minio.errors.InternalException;
@@ -52,6 +55,7 @@ import io.minio.errors.ServerException;
 import io.minio.errors.XmlParserException;
 import io.minio.messages.Tags;
 import okhttp3.OkHttpClient;
+import org.apache.commons.collections.CollectionUtils;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.RegExUtils;
 import org.apache.commons.lang3.StringUtils;
@@ -67,6 +71,7 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.security.InvalidKeyException;
 import java.security.NoSuchAlgorithmException;
+import java.util.List;
 
 public class StockageService
 {
@@ -281,6 +286,53 @@ public class StockageService
         }
 
         return completePathToFile;
+    }
+
+    /**
+     * Proceed save files as single tarball archive in S3 root directory.
+     * @param objects list of files to upload as {@link SnowballObject}
+     * @return
+     * @throws MinioException error uploading the file(s)
+     */
+    public ObjectWriteResponse saveFileToNetAppServer( List<SnowballObject> objects ) throws MinioException
+    {
+        return saveFileToNetAppServer( objects, null );
+    }
+
+    public ObjectWriteResponse saveFileToNetAppServer( List<SnowballObject> objects, Multimap<String, String> userMetadata ) throws MinioException
+    {
+        if ( CollectionUtils.isEmpty( objects ) )
+        {
+            return null;
+        }
+
+        try
+        {
+            return getS3Client().uploadSnowballObjects(
+                    UploadSnowballObjectsArgs
+                            .builder( )
+                            .bucket( _s3Bucket )
+                            .objects(objects)
+                            .userMetadata( userMetadata )
+                            .build());
+        }
+        catch( InvalidKeyException | IOException | NoSuchAlgorithmException | URISyntaxException e )
+        {
+            AppLogService.error( "Erreur de sauvegarde du fichier", e );
+            throw new MinioException( "Erreur de sauvegarde du fichier " );
+        }
+        catch ( ErrorResponseException e )
+        {
+            AppLogService.error( "Erreur de sauvegarde du fichier ", e );
+            logErrorResponse( e );
+            throw new MinioException( "Erreur de sauvegarde du fichier " );
+        }
+        catch ( MinioException e )
+        {
+            AppLogService.error( "Erreur de sauvegarde du fichier ", e );
+            logMinioException( e );
+            throw new MinioException( "Erreur de sauvegarde du fichier " );
+        }
     }
 
     /**
