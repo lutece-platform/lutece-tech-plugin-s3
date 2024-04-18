@@ -34,15 +34,23 @@
 
 package fr.paris.lutece.plugins.strois.service;
 
+import com.google.common.collect.Multimap;
 import fr.paris.lutece.plugins.strois.util.S3Util;
 import fr.paris.lutece.portal.service.util.AppLogService;
 import fr.paris.lutece.portal.service.util.AppPropertiesService;
 import io.minio.GetObjectArgs;
+import io.minio.GetObjectTagsArgs;
 import io.minio.MinioClient;
 import io.minio.PutObjectArgs;
 import io.minio.RemoveObjectArgs;
 import io.minio.errors.ErrorResponseException;
+import io.minio.errors.InsufficientDataException;
+import io.minio.errors.InternalException;
+import io.minio.errors.InvalidResponseException;
 import io.minio.errors.MinioException;
+import io.minio.errors.ServerException;
+import io.minio.errors.XmlParserException;
+import io.minio.messages.Tags;
 import okhttp3.OkHttpClient;
 import org.apache.commons.io.IOUtils;
 import org.apache.commons.lang3.RegExUtils;
@@ -175,7 +183,25 @@ public class StockageService
      */
     public String saveFileToNetAppServer( byte [ ] fileToSave, String pathToFile ) throws MinioException
     {
-        return saveFileToNetAppServer( new ByteArrayInputStream( fileToSave ), fileToSave.length, pathToFile );
+        return saveFileToNetAppServer( new ByteArrayInputStream( fileToSave ), fileToSave.length, pathToFile, null );
+    }
+
+    /**
+     * Proceed save file.
+     *
+     * @param fileToSave
+     *            file content as byte[]
+     * @param pathToFile
+     *            path + filename to put file content in
+     * @param userMetadata
+     *            user metadata
+     *
+     * @return path to the photo on NetApp serveur
+     *
+     */
+    public String saveFileToNetAppServer( byte [ ] fileToSave, String pathToFile, Multimap<String, String> userMetadata ) throws MinioException
+    {
+        return saveFileToNetAppServer( new ByteArrayInputStream( fileToSave ), fileToSave.length, pathToFile, userMetadata );
     }
 
     /**
@@ -193,6 +219,26 @@ public class StockageService
      *
      */
     public String saveFileToNetAppServer( InputStream fileToSave, long fileLength, String pathToFile ) throws MinioException
+    {
+        return saveFileToNetAppServer( fileToSave, fileLength, pathToFile, null );
+    }
+
+    /**
+     * Proceed save file.
+     *
+     * @param fileToSave
+     *            file content InputStream
+     * @param fileLength
+     *            file length (-1 if unknown)
+     * @param pathToFile
+     *            path + filename to put file content in
+     * @param userMetadata
+     *            user metadata
+     * @return path to the photo on NetApp serveur
+     * @throws MinioException error uploading the file
+     *
+     */
+    public String saveFileToNetAppServer( InputStream fileToSave, long fileLength, String pathToFile, Multimap<String, String> userMetadata ) throws MinioException
     {
         if ( fileToSave == null || StringUtils.isEmpty( pathToFile ) )
         {
@@ -213,6 +259,7 @@ public class StockageService
                                         .bucket( _s3Bucket )
                                         .object( completePathToFile )
                                         .stream( fileToSave , fileLength, partSize )
+                                        .userMetadata( userMetadata )
                                         .build( ) );
         }
         catch( InvalidKeyException | IOException | NoSuchAlgorithmException | URISyntaxException e )
@@ -280,6 +327,38 @@ public class StockageService
 
         AppLogService.debug( "Deleting file " + completePathToFile + " is " + ( result ? "OK" : "KO" ) );
         return result;
+    }
+
+    /**
+     *
+     * @param pathToFile path + filename
+     * @return Tags of the object
+     * @throws MinioException error getting the tags
+     */
+    public Tags getObjectTags( String pathToFile ) throws MinioException
+    {
+        try
+        {
+            return getS3Client( ).getObjectTags( GetObjectTagsArgs.builder( ).bucket( _s3Bucket ).object( pathToFile ).build( ) );
+        }
+        catch ( ErrorResponseException e )
+        {
+            AppLogService.error( "Erreur de récupération des tags du fichier ", e );
+            logErrorResponse( e );
+            throw new MinioException( "Erreur de récupération des tags du fichier " );
+        }
+        catch ( XmlParserException | ServerException | InvalidResponseException |
+                InternalException | InsufficientDataException e )
+        {
+            AppLogService.error( "Erreur de récupération des tags du fichier " + pathToFile, e );
+            logMinioException( e );
+            throw new MinioException( "Erreur de récupération des tags du fichier " + pathToFile );
+        }
+        catch ( InvalidKeyException | URISyntaxException | NoSuchAlgorithmException | IOException e )
+        {
+            AppLogService.error( "Erreur de récupération des tags du fichier " + pathToFile, e );
+            throw new MinioException( "Erreur de récupération des tags du fichier " + pathToFile );
+        }
     }
 
     /**
