@@ -1,0 +1,34 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+
+<beans xmlns="http://www.springframework.org/schema/beans"
+       xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+       xsi:schemaLocation="http://www.springframework.org/schema/beans http://www.springframework.org/schema/beans/spring-beans.xsd" >
+
+    <!-- Override default separator "/" to handle path in ressource keys -->
+    <bean id="s3FileDownloadUrlService" class="fr.paris.lutece.portal.service.file.implementation.DefaultFileDownloadService">
+        <property name="separator" value="!" />
+    </bean>
+
+    <bean id="defaultFileRBACService" class="fr.paris.lutece.portal.service.file.implementation.DefaultFileRBACService" />
+
+    <bean id="s3StorageFileService" class="fr.paris.lutece.plugins.sthree.service.file.implementation.S3StorageFileService">
+		<constructor-arg ref="s3FileDownloadUrlService" />
+        <constructor-arg ref="defaultFileRBACService" />
+        <constructor-arg name="s3Url" value="${s3Url}" />
+        <constructor-arg name="s3Bucket" value="${s3Bucket}" />
+        <constructor-arg name="s3Key" value="${s3Key}" />
+        <constructor-arg name="s3Password" value="${s3Password}" />
+        <constructor-arg name="s3DefaultFilePath" value="${s3DefaultFilePath}" />
+
+        <property name="name" value="s3StorageFileService" />
+    </bean>
+
+    <!--
+    <bean id="s3-bucket2" class="fr.paris.lutece.plugins.sthree.service.S3StorageFileService">
+        <constructor-arg name="s3Url" value="" />
+        <constructor-arg name="s3Bucket" value="" />
+        <constructor-arg name="s3Key" value="" />
+        <constructor-arg name="s3Password" value="" />
+    </bean>
+    -->
+</beans>

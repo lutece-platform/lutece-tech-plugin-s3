@@ -5,13 +5,13 @@
             <item name="EN" href="../index.html" />
         </links>
         
-        <menu name="Plugin strois">
+        <menu name="Plugin sthree">
             <item name="Accueil" href="index.html"/>
         </menu>
         
         <menu name="Téléchargements" inherit="bottom" >
-            <item name="Versions stables" href="../../../stable_builds/plugins/plugin-strois/"/>
-            <item name="Nightly builds" href="../../../nightly_builds/plugins/plugin-strois/" />
+            <item name="Versions stables" href="../../../stable_builds/plugins/plugin-sthree/"/>
+            <item name="Nightly builds" href="../../../nightly_builds/plugins/plugin-sthree/" />
         </menu>
 
     <!--
