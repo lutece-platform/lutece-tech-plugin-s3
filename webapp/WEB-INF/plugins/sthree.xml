@@ -1,13 +1,13 @@
 <?xml version="1.0" encoding="UTF-8"?><plug-in>
-    <name>strois</name>
+    <name>sthree</name>
     <class>fr.paris.lutece.portal.service.plugin.PluginDefaultImplementation</class>
     <version>1.0.1-SNAPSHOT</version>
     <documentation/>
     <installation/>
     <changes/>
     <user-guide/>
-    <description>strois.plugin.description</description>
-    <provider>strois.plugin.provider</provider>
+    <description>sthree.plugin.description</description>
+    <provider>sthree.plugin.provider</provider>
     <provider-url>https://paris.fr/</provider-url>
     <icon-url>images/admin/skin/feature_default_icon.png</icon-url>
     <copyright>Copyright (c) 2022 Ville de Paris</copyright>

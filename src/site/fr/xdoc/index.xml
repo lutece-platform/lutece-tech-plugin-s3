@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <document>
     <properties>
-        <title>Plugin strois</title>
+        <title>Plugin sthree</title>
     </properties>
     <head>
         <!-- Keywords example : "cms, authentication, cms, workflow, seo, collaborative, ..." 
@@ -9,10 +9,10 @@
         <meta name="keywords" content="" />
     </head>
     <body>
-        <section name="Plugin strois">
+        <section name="Plugin sthree">
             <!--
             <p>
-                <img src="images/strois.png" />
+                <img src="images/sthree.png" />
             </p>
             -->
             <subsection name="Introduction">
