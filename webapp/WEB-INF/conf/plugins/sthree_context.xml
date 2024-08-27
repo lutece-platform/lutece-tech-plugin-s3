@@ -20,15 +20,17 @@
         <constructor-arg name="s3Password" value="${s3Password}" />
         <constructor-arg name="s3DefaultFilePath" value="${s3DefaultFilePath}" />
 
+        <constructor-arg name="s3ForcePathStyle" value="${s3ForcePathStyle}" />
+        <constructor-arg name="s3Region" value="${s3Region}" />
+        <constructor-arg name="s3ChecksumAlgorithm" value="${s3ChecksumAlgorithm}" />
+
+        <constructor-arg name="s3ProxyHost" value="${s3ProxyHost}" />
+        <constructor-arg name="s3ProxyUsername" value="${s3ProxyUsername}" />
+        <constructor-arg name="s3ProxyPassword" value="${s3ProxyPassword}" />
+
+        <constructor-arg name="s3RequestTimeout" value="${s3RequestTimeout}" />
+        <constructor-arg name="s3ConnectionTimeout" value="${s3ConnectionTimeout}" />
+
         <property name="name" value="s3StorageFileService" />
     </bean>
-
-    <!--
-    <bean id="s3-bucket2" class="fr.paris.lutece.plugins.sthree.service.S3StorageFileService">
-        <constructor-arg name="s3Url" value="" />
-        <constructor-arg name="s3Bucket" value="" />
-        <constructor-arg name="s3Key" value="" />
-        <constructor-arg name="s3Password" value="" />
-    </bean>
-    -->
 </beans>

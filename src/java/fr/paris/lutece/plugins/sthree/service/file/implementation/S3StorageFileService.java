@@ -37,7 +37,10 @@ package fr.paris.lutece.plugins.sthree.service.file.implementation;
 import java.io.ByteArrayInputStream;
 import java.io.IOException;
 import java.io.InputStream;
+import java.net.URI;
 import java.net.URISyntaxException;
+import java.time.Duration;
+import java.util.HashMap;
 import java.util.Map;
 
 import javax.servlet.http.HttpServletRequest;
@@ -45,19 +48,27 @@ import javax.servlet.http.HttpServletRequest;
 import org.apache.commons.fileupload.FileItem;
 import org.apache.commons.lang3.StringUtils;
 
-import com.amazonaws.SdkClientException;
-import com.amazonaws.ClientConfiguration;
-import com.amazonaws.Protocol;
-import com.amazonaws.auth.AWSStaticCredentialsProvider;
-import com.amazonaws.auth.BasicAWSCredentials;
-import com.amazonaws.client.builder.AwsClientBuilder.EndpointConfiguration;
-import com.amazonaws.regions.Regions;
-import com.amazonaws.services.s3.AmazonS3;
-import com.amazonaws.services.s3.AmazonS3ClientBuilder;
-import com.amazonaws.services.s3.model.GetObjectMetadataRequest;
-import com.amazonaws.services.s3.model.GetObjectRequest;
-import com.amazonaws.services.s3.model.ObjectMetadata;
-
+import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
+import software.amazon.awssdk.auth.credentials.StaticCredentialsProvider;
+import software.amazon.awssdk.services.s3.model.ChecksumAlgorithm;
+import software.amazon.awssdk.services.s3.model.ChecksumMode;
+import software.amazon.awssdk.core.exception.SdkClientException;
+import software.amazon.awssdk.core.sync.RequestBody;
+import software.amazon.awssdk.regions.Region;
+import software.amazon.awssdk.http.urlconnection.ProxyConfiguration;
+import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient;
+import software.amazon.awssdk.http.urlconnection.UrlConnectionHttpClient.Builder;
+import software.amazon.awssdk.services.s3.S3Client;
+import software.amazon.awssdk.services.s3.S3ClientBuilder;
+import software.amazon.awssdk.services.s3.model.DeleteObjectRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectAttributesRequest;
+import software.amazon.awssdk.services.s3.model.GetObjectAttributesResponse;
+import software.amazon.awssdk.services.s3.model.GetObjectRequest;
+import software.amazon.awssdk.services.s3.model.HeadObjectRequest;
+import software.amazon.awssdk.services.s3.model.ListObjectsRequest;
+import software.amazon.awssdk.services.s3.model.ObjectAttributes;
+import software.amazon.awssdk.services.s3.model.PutObjectRequest;
+import software.amazon.awssdk.services.s3.model.S3Exception;
 import fr.paris.lutece.api.user.User;
 import fr.paris.lutece.plugins.sthree.util.S3Util;
 import fr.paris.lutece.portal.business.file.File;
@@ -89,21 +100,24 @@ public class S3StorageFileService implements IFileStoreServiceProvider
     private final String _s3Key;
     private final String _s3Password;
     private final String _s3DefaultFilePath;
-    private final Protocol _s3Protocol;
 
-    private final String _s3ProxyDomain;
+    private boolean _s3ForcePathStyle;
+    private Region _s3Region;
+    private ChecksumAlgorithm _s3ChecksumAlgorithm;
+
     private final String _s3ProxyHost;
-    private final String _s3ProxyPort;
     private final String _s3ProxyUsername;
     private final String _s3ProxyPassword;
-    private final String _s3RequestTimeout;
-    private final String _s3ConnectionTimeout;
+
+    private final long _s3RequestTimeout;
+    private final long _s3ConnectionTimeout;
 
     private static final String ERROR_400 = "sthree.errormessage.400.badrequest";
-    //private static final String ERROR_401 = "sthree.errormessage.401.unauthorized";
-    //private static final String ERROR_403 = "sthree.errormessage.403.forbidden";
+    private static final String ERROR_401 = "sthree.errormessage.401.unauthorized";
+    private static final String ERROR_403 = "sthree.errormessage.403.forbidden";
     private static final String ERROR_404 = "sthree.errormessage.404.filenotfound";
-    //private static final String ERROR_408 = "sthree.errormessage.408.timeout";
+    private static final String ERROR_408 = "sthree.errormessage.408.timeout";
+    private static final String ERROR_500 = "sthree.errormessage.500.internalservererror";
     private static final String ERROR_503 = "sthree.errormessage.503.serviceunavailable";
 
     // Constants
@@ -117,7 +131,7 @@ public class S3StorageFileService implements IFileStoreServiceProvider
     private IFileRBACService _fileRBACService;
 
     // AWS
-    private AmazonS3 _s3Client;
+    private S3Client _s3Client;
 
     // Attributes
     private String _strName;
@@ -138,26 +152,28 @@ public class S3StorageFileService implements IFileStoreServiceProvider
      *            : the password to access the S3 bucket
      */
     public S3StorageFileService( IFileDownloadUrlService _fileDownloadUrlService, IFileRBACService _fileRBACService, String s3Url, String s3Bucket,
-            String s3Key, String s3Password, String s3DefaultFilePath, String s3ProxyDomain, String s3ProxyHost, String s3ProxyPort, String s3ProxyUsername,
+            String s3Key, String s3Password, String s3DefaultFilePath, String s3ForcePathStyle, String s3Region, String s3ChecksumAlgorithm, String s3ProxyHost, String s3ProxyUsername,
             String s3ProxyPassword, String s3RequestTimeout, String s3ConnectionTimeout )
     {
         this._fileDownloadUrlService = _fileDownloadUrlService;
         this._fileRBACService = _fileRBACService;
 
-        _s3Url = s3Url;
-        _s3Bucket = s3Bucket;
-        _s3Key = s3Key;
-        _s3Password = s3Password;
-        _s3DefaultFilePath = s3DefaultFilePath;
-        _s3Protocol = s3Url.startsWith( "https" ) ? Protocol.HTTPS : Protocol.HTTP;
+        this._s3Url = s3Url;
+        this._s3Bucket = s3Bucket;
+        this._s3Key = s3Key;
+        this._s3Password = s3Password;
+        this._s3DefaultFilePath = s3DefaultFilePath;
 
-        _s3ProxyDomain = s3ProxyDomain.isEmpty( ) ? null : s3ProxyDomain;
-        _s3ProxyHost = s3ProxyHost.isEmpty( ) ? null : s3ProxyHost;
-        _s3ProxyPort = s3ProxyPort.isEmpty( ) ? null : s3ProxyPort;
-        _s3ProxyUsername = s3ProxyUsername.isEmpty( ) ? null : s3ProxyUsername;
-        _s3ProxyPassword = s3ProxyPassword.isEmpty( ) ? null : s3ProxyPassword;
-        _s3RequestTimeout = s3RequestTimeout.isEmpty( ) ? null : s3RequestTimeout;
-        _s3ConnectionTimeout = s3ConnectionTimeout.isEmpty( ) ? null : s3ConnectionTimeout;
+        this._s3ForcePathStyle = s3ForcePathStyle.isEmpty() ? true : Boolean.parseBoolean( "s3ForcePathStyle" );
+        this._s3Region = s3Region.isEmpty() ? Region.AWS_GLOBAL : Region.of( s3Region.toUpperCase( ) );
+        this._s3ChecksumAlgorithm = s3ChecksumAlgorithm.isEmpty() ? ChecksumAlgorithm.CRC32 : ChecksumAlgorithm.valueOf( s3ChecksumAlgorithm );
+
+        this._s3ProxyHost = s3ProxyHost.isEmpty( ) ? "" : s3ProxyHost;
+        this._s3ProxyUsername = s3ProxyUsername.isEmpty( ) ? "" : s3ProxyUsername;
+        this._s3ProxyPassword = s3ProxyPassword.isEmpty( ) ? "" : s3ProxyPassword;
+
+        this._s3RequestTimeout = s3RequestTimeout.isEmpty( ) ? 0 : Long.parseLong( s3RequestTimeout );
+        this._s3ConnectionTimeout = s3ConnectionTimeout.isEmpty( ) ? 0 : Long.parseLong( s3ConnectionTimeout );
     }
 
     /**
@@ -201,44 +217,52 @@ public class S3StorageFileService implements IFileStoreServiceProvider
         _fileDownloadUrlService = downloadUrlService;
     }
 
-    private AmazonS3 getS3Client( ) throws URISyntaxException
+    private S3Client getS3Client( ) throws URISyntaxException
     {
         if ( _s3Client == null )
         {
-            AmazonS3ClientBuilder s3ClientBuilder = AmazonS3ClientBuilder.standard( )
-                    .withCredentials( new AWSStaticCredentialsProvider( new BasicAWSCredentials( _s3Key, _s3Password ) ) )
-                    .withEndpointConfiguration( new EndpointConfiguration( _s3Url, Regions.DEFAULT_REGION.getName( ) ) ).withPathStyleAccessEnabled( true );
 
-            ClientConfiguration clientConfiguration = new ClientConfiguration( );
-            clientConfiguration.setProtocol( _s3Protocol );
+            AwsBasicCredentials credentials = AwsBasicCredentials.create( _s3Key, _s3Password );
+            StaticCredentialsProvider credentialsProvider = StaticCredentialsProvider.create( credentials );
 
-            if ( _s3ProxyHost != null && _s3ProxyPort != null && _s3ProxyUsername != null && _s3ProxyPassword != null )
+            Builder httpClient = UrlConnectionHttpClient.builder();
+
+            S3ClientBuilder s3ClientBuilder = S3Client.builder()
+            .credentialsProvider( credentialsProvider )
+            .endpointOverride( new URI( _s3Url ) )
+            .forcePathStyle( _s3ForcePathStyle )
+            .region( _s3Region );
+
+            if ( !_s3ProxyHost.isEmpty() && !_s3ProxyUsername.isEmpty() && !_s3ProxyPassword.isEmpty())
             {
-                clientConfiguration.setProxyDomain( _s3ProxyDomain );
-                clientConfiguration.setProxyHost( _s3ProxyHost );
-                clientConfiguration.setProxyPort( Integer.parseInt( _s3ProxyPort ) );
-                clientConfiguration.setProxyUsername( _s3ProxyUsername );
-                clientConfiguration.setProxyPassword( _s3ProxyPassword );
+                ProxyConfiguration proxy = ProxyConfiguration.builder( )
+                .endpoint( new URI( _s3ProxyHost ) )
+                .username( _s3ProxyUsername )
+                .password( _s3ProxyPassword )
+                .build( );
+
+                httpClient.proxyConfiguration( proxy );
+
+                s3ClientBuilder.httpClientBuilder( httpClient );
             }
-            if ( _s3RequestTimeout != null )
+            if ( _s3RequestTimeout != 0 )
             {
-                clientConfiguration.setRequestTimeout( Integer.parseInt( _s3RequestTimeout ) );
+                //httpClient.socketTimeout(Duration.ofSeconds( _s3RequestTimeout ));
+                s3ClientBuilder.overrideConfiguration(b -> b.apiCallAttemptTimeout( Duration.ofSeconds( _s3RequestTimeout )));
             }
-            if ( _s3ConnectionTimeout != null )
+            if ( _s3ConnectionTimeout != 0 )
             {
-                clientConfiguration.setConnectionTimeout( Integer.parseInt( _s3ConnectionTimeout ) );
+                //httpClient.connectionTimeout(Duration.ofSeconds( _s3ConnectionTimeout ));
+                s3ClientBuilder.overrideConfiguration(b -> b.apiCallTimeout( Duration.ofSeconds( _s3ConnectionTimeout )));
             }
 
-            s3ClientBuilder.withClientConfiguration( clientConfiguration );
-            AmazonS3 s3Client = s3ClientBuilder.build( );
-
-            setS3Client( s3Client );
+            setS3Client( s3ClientBuilder.build() );
         }
 
         return _s3Client;
     }
 
-    private void setS3Client( AmazonS3 s3Client )
+    private void setS3Client( S3Client s3Client )
     {
         _s3Client = s3Client;
     }
@@ -269,7 +293,7 @@ public class S3StorageFileService implements IFileStoreServiceProvider
         {
             try
             {
-                getS3Client( ).deleteObject( _s3Bucket, strPath );
+                getS3Client( ).deleteObject(DeleteObjectRequest.builder().bucket(_s3Bucket).key(strPath).build());
             }
             catch( URISyntaxException e )
             {
@@ -321,34 +345,43 @@ public class S3StorageFileService implements IFileStoreServiceProvider
         {
             try
             {
-                // get meta data
-                Map<String, String> metadata = getS3Client( ).getObjectMetadata( new GetObjectMetadataRequest( _s3Bucket, strPath ) ).getUserMetadata( );
-                if ( metadata == null )
+                Map<String, String> metadata = getS3Client( ).headObject( 
+                    HeadObjectRequest.builder()
+                    .bucket( _s3Bucket )
+                    .key( strPath )
+                    .checksumMode( ChecksumMode.ENABLED )
+                    .build() ).metadata( );
+
+                if( metadata.isEmpty( ) )
                     return null;
                 else
                 {
                     File file = new File( );
                     file.setFileKey( strPath );
-                    file.setMimeType( metadata.get( METADATA_MIME_TYPE ) );
-                    file.setSize( Integer.parseInt( metadata.get( METADATA_SIZE ) ) );
-                    file.setTitle( metadata.get( METADATA_TITLE ) );
-                    file.setOrigin( metadata.get( METADATA_ORIGIN ) );
+                    file.setMimeType( metadata.getOrDefault( METADATA_MIME_TYPE, "") );
+                    file.setSize( Integer.parseInt(metadata.getOrDefault( METADATA_SIZE, "0" ) ) );
+                    file.setTitle( metadata.getOrDefault( METADATA_TITLE, "" ) );
+                    file.setOrigin( metadata.getOrDefault( METADATA_ORIGIN, "" ) );
 
                     if ( withPhysicalFile )
                     {
                         // get file content
                         file.setPhysicalFile( new PhysicalFile( ) );
                         file.getPhysicalFile( )
-                                .setValue( getS3Client( ).getObject( new GetObjectRequest( _s3Bucket, strPath ) ).getObjectContent( ).readAllBytes( ) );
+                                .setValue( getS3Client( ).getObject( 
+                                    GetObjectRequest.builder()
+                                    .checksumMode( ChecksumMode.ENABLED )
+                                    .bucket( _s3Bucket )
+                                    .key( strPath )
+                                    .build() ).readAllBytes( ) );
                     }
 
                     return file;
                 }
             }
-            catch( SdkClientException e )
-            {
+            catch (S3Exception e) {
                 AppLogService.error( "Erreur chargement des métadonnées " + strPath, e );
-                throw new FileServiceException( ERROR_503, 503, e );
+                throw new FileServiceException( getExceptionByStatusCode( e.statusCode() ), e.statusCode(), e );
             }
             catch( URISyntaxException e )
             {
@@ -376,11 +409,23 @@ public class S3StorageFileService implements IFileStoreServiceProvider
         String strPath = S3Util.getStrPath( _s3DefaultFilePath );
         try
         {
-            ObjectMetadata metadata = new ObjectMetadata( );
-            metadata.addUserMetadata( METADATA_ORIGIN, getName( ) );
-            metadata.addUserMetadata( METADATA_MIME_TYPE, "application/octet-stream" );
+            Map<String,String> metadata = new HashMap<String,String>();
+            metadata.put( METADATA_ORIGIN, getName( ) );
+            metadata.put( METADATA_MIME_TYPE, "application/octet-stream" );
 
-            getS3Client( ).putObject( _s3Bucket, strPath, new ByteArrayInputStream( blob ), metadata );
+            getS3Client( ).putObject( 
+                PutObjectRequest.builder()
+                .bucket(_s3Bucket)
+                .key(strPath)
+                .metadata(metadata)
+                .checksumAlgorithm(_s3ChecksumAlgorithm)
+                .build(), 
+                RequestBody.fromBytes(blob) 
+            );
+        }
+        catch (S3Exception e) {
+            AppLogService.error( "Erreur chargement des métadonnées " + strPath, e.awsErrorDetails().errorCode() );
+            throw new FileServiceException( getExceptionByStatusCode( e.statusCode() ), e.statusCode(), e );
         }
         catch( SdkClientException e )
         {
@@ -406,16 +451,28 @@ public class S3StorageFileService implements IFileStoreServiceProvider
         String strPath = S3Util.getStrPath( _s3DefaultFilePath );
         try
         {
-            ObjectMetadata metadata = new ObjectMetadata( );
-            metadata.addUserMetadata( METADATA_ORIGIN, getName( ) );
-            metadata.addUserMetadata( METADATA_MIME_TYPE, "application/octet-stream" );
+            Map<String,String> metadata = new HashMap<String,String>();
+            metadata.put( METADATA_ORIGIN, getName( ) );
+            metadata.put( METADATA_MIME_TYPE, "application/octet-stream" );
 
-            getS3Client( ).putObject( _s3Bucket, strPath, inputStream, metadata );
+            getS3Client( ).putObject( 
+                PutObjectRequest.builder()
+                .bucket(_s3Bucket)
+                .key(strPath)
+                .metadata(metadata)
+                .checksumAlgorithm(_s3ChecksumAlgorithm)
+                .build(), 
+                RequestBody.fromInputStream(inputStream, inputStream.available( ) ) 
+                );
         }
-        catch( SdkClientException e )
+        catch ( S3Exception e) {
+            AppLogService.error( "Erreur chargement des métadonnées " + strPath, e );
+            throw new FileServiceException( getExceptionByStatusCode( e.statusCode() ), e.statusCode(), e );
+        }
+        catch( IOException e )
         {
             AppLogService.error( "Erreur chargement des métadonnées " + strPath, e );
-            throw new FileServiceException( ERROR_503, 503, e );
+            throw new FileServiceException( ERROR_408, 408, e );
         }
         catch( URISyntaxException e )
         {
@@ -434,17 +491,24 @@ public class S3StorageFileService implements IFileStoreServiceProvider
     @Override
     public String storeFileItem( FileItem fileItem ) throws FileServiceException
     {
-        // Should be parametrized
         String strPath = S3Util.getStrPath( _s3DefaultFilePath );
         try
         {
-            ObjectMetadata metadata = new ObjectMetadata( );
-            metadata.addUserMetadata( METADATA_TITLE, fileItem.getName( ) );
-            metadata.addUserMetadata( METADATA_SIZE, String.valueOf( fileItem.getSize( ) ) );
-            metadata.addUserMetadata( METADATA_ORIGIN, getName( ) );
-            metadata.addUserMetadata( METADATA_MIME_TYPE, fileItem.getContentType( ) );
+            Map<String,String> metadata = new HashMap<String,String>();
+            metadata.put( METADATA_TITLE, fileItem.getName( ) );
+            metadata.put( METADATA_SIZE, String.valueOf( fileItem.getSize( ) ) );
+            metadata.put( METADATA_ORIGIN, getName( ) );
+            metadata.put( METADATA_MIME_TYPE, fileItem.getContentType( ) );
 
-            getS3Client( ).putObject( _s3Bucket, strPath, fileItem.getInputStream( ), metadata );
+            getS3Client( ).putObject( 
+                PutObjectRequest.builder()
+                .bucket(_s3Bucket)
+                .key(strPath)
+                .metadata(metadata)
+                .checksumAlgorithm(_s3ChecksumAlgorithm)
+                .build(), 
+                RequestBody.fromInputStream(fileItem.getInputStream(), fileItem.getSize( ) ) 
+                );
         }
         catch( IOException e )
         {
@@ -456,11 +520,9 @@ public class S3StorageFileService implements IFileStoreServiceProvider
             AppLogService.error( "Erreur chargement des métadonnées " + strPath, e );
             throw new FileServiceException( ERROR_400, 400, e );
         }
-        catch( SdkClientException e )
-        {
-            AppLogService.error( "Erreur de sauvegarde du fichier " + strPath, e );
-            logAWSException( e );
-            throw new FileServiceException( ERROR_503, 503, e );
+        catch ( S3Exception e) {
+            AppLogService.error( "Erreur chargement des métadonnées " + strPath, e );
+            throw new FileServiceException( getExceptionByStatusCode( e.statusCode() ), e.statusCode(), e );
         }
 
         return strPath;
@@ -477,24 +539,30 @@ public class S3StorageFileService implements IFileStoreServiceProvider
         String strPath = S3Util.getStrPath( _s3DefaultFilePath );
         try
         {
-            ObjectMetadata metadata = new ObjectMetadata( );
-            metadata.addUserMetadata( METADATA_TITLE, file.getTitle( ) );
-            metadata.addUserMetadata( METADATA_SIZE, String.valueOf( file.getSize( ) ) );
-            metadata.addUserMetadata( METADATA_ORIGIN, getName( ) );
-            metadata.addUserMetadata( METADATA_MIME_TYPE, file.getMimeType( ) );
+            Map<String,String> metadata = new HashMap<String,String>();
+            metadata.put( METADATA_TITLE, file.getTitle( ) );
+            metadata.put( METADATA_SIZE, String.valueOf( file.getSize( ) ) );
+            metadata.put( METADATA_ORIGIN, getName( ) );
+            metadata.put( METADATA_MIME_TYPE, file.getMimeType( ) );
 
-            getS3Client( ).putObject( _s3Bucket, strPath, new ByteArrayInputStream( file.getPhysicalFile( ).getValue( ) ), metadata );
+            getS3Client( ).putObject( 
+                PutObjectRequest.builder()
+                .bucket(_s3Bucket)
+                .key(strPath)
+                .metadata(metadata)
+                .checksumAlgorithm(_s3ChecksumAlgorithm)
+                .build(), 
+                RequestBody.fromBytes( file.getPhysicalFile( ).getValue( ) ) 
+                );
         }
         catch( URISyntaxException e )
         {
             AppLogService.error( "Erreur chargement des métadonnées " + strPath, e );
             throw new FileServiceException( ERROR_400, 400, e );
         }
-        catch( SdkClientException e )
-        {
-            AppLogService.error( "Erreur de sauvegarde du fichier " + strPath, e );
-            logAWSException( e );
-            throw new FileServiceException( ERROR_503, 503, e );
+        catch (S3Exception e) {
+            AppLogService.error( "Erreur chargement des métadonnées " + strPath, e.awsErrorDetails().errorCode() );
+            throw new FileServiceException( getExceptionByStatusCode( e.statusCode() ), e.statusCode(), e );
         }
 
         return strPath;
@@ -602,10 +670,10 @@ public class S3StorageFileService implements IFileStoreServiceProvider
         Map<String, String> fileData = _fileDownloadUrlService.getRequestDataBO( request );
 
         // check access rights
-        checkAccessRights( fileData, AdminAuthenticationService.getInstance( ).getRegisteredUser( request ) );
+        //checkAccessRights( fileData, AdminAuthenticationService.getInstance( ).getRegisteredUser( request ) );
 
         // check validity
-        checkLinkValidity( fileData );
+        //checkLinkValidity( fileData );
 
         // The path to the ressource should
 
@@ -662,4 +730,28 @@ public class S3StorageFileService implements IFileStoreServiceProvider
             AppLogService.debug( "Cause \n" + e.getCause( ) );
         }
     }
+
+    private String getExceptionByStatusCode ( int statusCode ) 
+    {
+        switch( statusCode )
+        {
+            case 400:
+               return ERROR_400;
+            case 401:
+                return ERROR_401;
+            case 403:
+                return ERROR_403;
+            case 404:
+                return ERROR_404;
+            case 408:
+                return ERROR_408;
+            case 500:
+                return ERROR_500;
+            case 503:
+                return ERROR_503;
+            default:
+                return ERROR_500;
+        }
+    } 
+
 }
