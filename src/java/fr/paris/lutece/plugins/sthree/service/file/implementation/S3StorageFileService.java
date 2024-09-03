@@ -750,7 +750,7 @@ public class S3StorageFileService implements IFileStoreServiceProvider
             case 503:
                 return ERROR_503;
             default:
-                return ERROR_500;
+                return "Error " + statusCode;
         }
     } 
 
