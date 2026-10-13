@@ -41,11 +41,13 @@ import java.net.URI;
 import java.net.URISyntaxException;
 import java.time.Duration;
 import java.util.HashMap;
+import java.util.Locale;
 import java.util.Map;
+import java.util.TreeMap;
 
-import javax.servlet.http.HttpServletRequest;
+import jakarta.servlet.http.HttpServletRequest;
 
-import org.apache.commons.fileupload.FileItem;
+import fr.paris.lutece.portal.service.upload.MultipartItem;
 import org.apache.commons.lang3.StringUtils;
 
 import software.amazon.awssdk.auth.credentials.AwsBasicCredentials;
@@ -125,6 +127,7 @@ public class S3StorageFileService implements IFileStoreServiceProvider
     private static final String METADATA_SIZE = "size";
     private static final String METADATA_TITLE = "title";
     private static final String METADATA_ORIGIN = "origin";
+    private static final String CHECKSUM_DISABLED = "DISABLED";
 
     // Services
     private IFileDownloadUrlService _fileDownloadUrlService;
@@ -164,9 +167,9 @@ public class S3StorageFileService implements IFileStoreServiceProvider
         this._s3Password = s3Password;
         this._s3DefaultFilePath = s3DefaultFilePath;
 
-        this._s3ForcePathStyle = s3ForcePathStyle.isEmpty() ? true : Boolean.parseBoolean( "s3ForcePathStyle" );
+        this._s3ForcePathStyle = s3ForcePathStyle.isEmpty() ? true : Boolean.parseBoolean( s3ForcePathStyle );
         this._s3Region = s3Region.isEmpty() ? Region.AWS_GLOBAL : Region.of( s3Region.toUpperCase( ) );
-        this._s3ChecksumAlgorithm = s3ChecksumAlgorithm.isEmpty() ? ChecksumAlgorithm.CRC32 : ChecksumAlgorithm.valueOf( s3ChecksumAlgorithm );
+        this._s3ChecksumAlgorithm = parseChecksumAlgorithm( s3ChecksumAlgorithm );
 
         this._s3ProxyHost = s3ProxyHost.isEmpty( ) ? "" : s3ProxyHost;
         this._s3ProxyUsername = s3ProxyUsername.isEmpty( ) ? "" : s3ProxyUsername;
@@ -177,8 +180,36 @@ public class S3StorageFileService implements IFileStoreServiceProvider
     }
 
     /**
+     * Parses the configured checksum algorithm: empty gives CRC32, DISABLED gives none, an unknown value gives CRC32.
+     *
+     * @param strChecksumAlgorithm
+     *            the configured value
+     * @return the checksum algorithm, or null when disabled
+     */
+    static ChecksumAlgorithm parseChecksumAlgorithm( String strChecksumAlgorithm )
+    {
+        if ( StringUtils.isBlank( strChecksumAlgorithm ) )
+        {
+            return ChecksumAlgorithm.CRC32;
+        }
+        String strValue = strChecksumAlgorithm.trim( ).toUpperCase( Locale.ROOT );
+        if ( CHECKSUM_DISABLED.equals( strValue ) )
+        {
+            return null;
+        }
+        ChecksumAlgorithm algorithm = ChecksumAlgorithm.fromValue( strValue );
+        if ( algorithm == null || algorithm == ChecksumAlgorithm.UNKNOWN_TO_SDK_VERSION )
+        {
+            AppLogService.error( "Unknown s3ChecksumAlgorithm {}, CRC32 used instead. Valid values: {} or {}", strChecksumAlgorithm,
+                    ChecksumAlgorithm.knownValues( ), CHECKSUM_DISABLED );
+            return ChecksumAlgorithm.CRC32;
+        }
+        return algorithm;
+    }
+
+    /**
      * get the FileRBACService
-     * 
+     *
      * @return the FileRBACService
      */
     public IFileRBACService getFileRBACService( )
@@ -217,7 +248,14 @@ public class S3StorageFileService implements IFileStoreServiceProvider
         _fileDownloadUrlService = downloadUrlService;
     }
 
-    private S3Client getS3Client( ) throws URISyntaxException
+    /**
+     * Gets the S3 client, built once on first use.
+     *
+     * @return the S3 client
+     * @throws URISyntaxException
+     *            if the S3 or proxy URL is invalid
+     */
+    private synchronized S3Client getS3Client( ) throws URISyntaxException
     {
         if ( _s3Client == null )
         {
@@ -262,6 +300,12 @@ public class S3StorageFileService implements IFileStoreServiceProvider
         return _s3Client;
     }
 
+    /**
+     * Sets the S3 client.
+     *
+     * @param s3Client
+     *            the S3 client
+     */
     private void setS3Client( S3Client s3Client )
     {
         _s3Client = s3Client;
@@ -297,7 +341,7 @@ public class S3StorageFileService implements IFileStoreServiceProvider
             }
             catch( URISyntaxException e )
             {
-                AppLogService.error( "Erreur à la supression du fichier " + strPath, e );
+                AppLogService.error( "Erreur à la supression du fichier {}", strPath, e );
                 throw new FileServiceException( ERROR_400, 400, e );
             }
             catch( SdkClientException e )
@@ -345,12 +389,13 @@ public class S3StorageFileService implements IFileStoreServiceProvider
         {
             try
             {
-                Map<String, String> metadata = getS3Client( ).headObject( 
+                Map<String, String> metadata = new TreeMap<>( String.CASE_INSENSITIVE_ORDER );
+                metadata.putAll( getS3Client( ).headObject(
                     HeadObjectRequest.builder()
                     .bucket( _s3Bucket )
                     .key( strPath )
                     .checksumMode( ChecksumMode.ENABLED )
-                    .build() ).metadata( );
+                    .build() ).metadata( ) );
 
                 if( metadata.isEmpty( ) )
                     return null;
@@ -380,17 +425,17 @@ public class S3StorageFileService implements IFileStoreServiceProvider
                 }
             }
             catch (S3Exception e) {
-                AppLogService.error( "Erreur chargement des métadonnées " + strPath, e );
+                AppLogService.error( "Erreur chargement des métadonnées {}", strPath, e );
                 throw new FileServiceException( getExceptionByStatusCode( e.statusCode() ), e.statusCode(), e );
             }
             catch( URISyntaxException e )
             {
-                AppLogService.error( "Erreur chargement des métadonnées " + strPath, e );
+                AppLogService.error( "Erreur chargement des métadonnées {}", strPath, e );
                 throw new FileServiceException( ERROR_400, 400, e );
             }
             catch( IOException e )
             {
-                AppLogService.error( "Erreur chargement des métadonnées " + strPath, e );
+                AppLogService.error( "Erreur chargement des métadonnées {}", strPath, e );
                 throw new FileServiceException( ERROR_404, 404, e );
             }
         }
@@ -424,17 +469,17 @@ public class S3StorageFileService implements IFileStoreServiceProvider
             );
         }
         catch (S3Exception e) {
-            AppLogService.error( "Erreur chargement des métadonnées " + strPath, e.awsErrorDetails().errorCode() );
+            AppLogService.error( "Erreur chargement des métadonnées {} : {}", strPath, e.awsErrorDetails().errorCode() );
             throw new FileServiceException( getExceptionByStatusCode( e.statusCode() ), e.statusCode(), e );
         }
         catch( SdkClientException e )
         {
-            AppLogService.error( "Erreur chargement des métadonnées " + strPath, e );
+            AppLogService.error( "Erreur chargement des métadonnées {}", strPath, e );
             throw new FileServiceException( ERROR_503, 503, e );
         }
         catch( URISyntaxException e )
         {
-            AppLogService.error( "Erreur chargement des métadonnées " + strPath, e );
+            AppLogService.error( "Erreur chargement des métadonnées {}", strPath, e );
             throw new FileServiceException( ERROR_400, 400, e );
         }
         return strPath;
@@ -466,17 +511,17 @@ public class S3StorageFileService implements IFileStoreServiceProvider
                 );
         }
         catch ( S3Exception e) {
-            AppLogService.error( "Erreur chargement des métadonnées " + strPath, e );
+            AppLogService.error( "Erreur chargement des métadonnées {}", strPath, e );
             throw new FileServiceException( getExceptionByStatusCode( e.statusCode() ), e.statusCode(), e );
         }
         catch( IOException e )
         {
-            AppLogService.error( "Erreur chargement des métadonnées " + strPath, e );
+            AppLogService.error( "Erreur chargement des métadonnées {}", strPath, e );
             throw new FileServiceException( ERROR_408, 408, e );
         }
         catch( URISyntaxException e )
         {
-            AppLogService.error( "Erreur chargement des métadonnées " + strPath, e );
+            AppLogService.error( "Erreur chargement des métadonnées {}", strPath, e );
             throw new FileServiceException( ERROR_400, 400, e );
         }
 
@@ -489,7 +534,7 @@ public class S3StorageFileService implements IFileStoreServiceProvider
      * @throws FileServiceException
      */
     @Override
-    public String storeFileItem( FileItem fileItem ) throws FileServiceException
+    public String storeFileItem( MultipartItem fileItem ) throws FileServiceException
     {
         String strPath = S3Util.getStrPath( _s3DefaultFilePath );
         try
@@ -512,16 +557,16 @@ public class S3StorageFileService implements IFileStoreServiceProvider
         }
         catch( IOException e )
         {
-            AppLogService.error( "Erreur chargement des métadonnées " + strPath, e );
+            AppLogService.error( "Erreur chargement des métadonnées {}", strPath, e );
             throw new FileServiceException( ERROR_404, 404, e );
         }
         catch( URISyntaxException e )
         {
-            AppLogService.error( "Erreur chargement des métadonnées " + strPath, e );
+            AppLogService.error( "Erreur chargement des métadonnées {}", strPath, e );
             throw new FileServiceException( ERROR_400, 400, e );
         }
         catch ( S3Exception e) {
-            AppLogService.error( "Erreur chargement des métadonnées " + strPath, e );
+            AppLogService.error( "Erreur chargement des métadonnées {}", strPath, e );
             throw new FileServiceException( getExceptionByStatusCode( e.statusCode() ), e.statusCode(), e );
         }
 
@@ -557,22 +602,34 @@ public class S3StorageFileService implements IFileStoreServiceProvider
         }
         catch( URISyntaxException e )
         {
-            AppLogService.error( "Erreur chargement des métadonnées " + strPath, e );
+            AppLogService.error( "Erreur chargement des métadonnées {}", strPath, e );
             throw new FileServiceException( ERROR_400, 400, e );
         }
         catch (S3Exception e) {
-            AppLogService.error( "Erreur chargement des métadonnées " + strPath, e.awsErrorDetails().errorCode() );
+            AppLogService.error( "Erreur chargement des métadonnées {} : {}", strPath, e.awsErrorDetails().errorCode() );
             throw new FileServiceException( getExceptionByStatusCode( e.statusCode() ), e.statusCode(), e );
         }
 
         return strPath;
     }
 
+    /**
+     * Sets whether this provider is the default one.
+     *
+     * @param bDefault
+     *            true for the default provider
+     */
     public void setDefault( boolean bDefault )
     {
         this._bDefault = bDefault;
     }
 
+    /**
+     * Sets the provider name.
+     *
+     * @param strName
+     *            the provider name
+     */
     public void setName( String strName )
     {
         _strName = strName;
@@ -705,6 +762,10 @@ public class S3StorageFileService implements IFileStoreServiceProvider
         return getFile( strFileId );
     }
 
+    /**
+     * {@inheritDoc}
+     */
+    @Override
     public boolean healthCheck( )
     {
         try
@@ -719,18 +780,31 @@ public class S3StorageFileService implements IFileStoreServiceProvider
         }
     }
 
+    /**
+     * Logs the message and cause of an AWS exception at debug level.
+     *
+     * @param e
+     *            the exception
+     */
     private void logAWSException( Exception e )
     {
         if ( e.getMessage( ) != null )
         {
-            AppLogService.debug( "Message \n" + e.getMessage( ) );
+            AppLogService.debug( "Message \n{}", e.getMessage( ) );
         }
         if ( e.getCause( ) != null )
         {
-            AppLogService.debug( "Cause \n" + e.getCause( ) );
+            AppLogService.debug( "Cause \n{}", e.getCause( ) );
         }
     }
 
+    /**
+     * Gets the i18n error key matching an HTTP status code.
+     *
+     * @param statusCode
+     *            the HTTP status code
+     * @return the i18n error key
+     */
     private String getExceptionByStatusCode ( int statusCode ) 
     {
         switch( statusCode )
